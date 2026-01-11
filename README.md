@@ -517,9 +517,9 @@ cangjie-mem/
 - [x] HTTP/SSE 远程模式（Streamable HTTP）
 - [x] HTTP Token 认证
 - [x] Docker 部署支持
+- [x] 访问统计和热度排序
 - [ ] CLI 管理工具
 - [ ] 自动摘要生成
-- [ ] 访问统计和热度排序
 
 ### Phase 3：智能化
 
