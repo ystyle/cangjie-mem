@@ -35,166 +35,89 @@
 
 ## 🚀 快速开始
 
-### 安装 Task（可选）
-
-项目使用 [Task](https://taskfile.dev/) 作为构建工具（替代 Makefile）：
-
-**Linux/macOS**:
-```bash
-# 安装 Task
-sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-# 或使用 Homebrew
-brew install go-task/tap/go-task
-```
-
-**Windows**:
-```powershell
-# 使用 Scoop
-scoop install task
-
-# 或使用 Chocolatey
-choco install go-task
-```
-
-如果不安装 Task，也可以直接使用 `go build` 命令。
-
-### 安装
-
-#### 从源码编译
-
-**使用 Task（推荐）**：
-```bash
-# 克隆仓库
-git clone https://github.com/ystyle/cangjie-mem.git
-cd cangjie-mem
-
-# 安装依赖
-task deps
-
-# 编译
-task build
-
-# 安装到系统
-task install
-```
-
-**不使用 Task**：
-```bash
-# 克隆仓库
-git clone https://github.com/ystyle/cangjie-mem.git
-cd cangjie-mem
-
-# 安装依赖
-go mod download
-
-# 编译
-go build -o cangjie-mem ./cmd/server
-
-# 安装到系统
-sudo mv cangjie-mem /usr/local/bin/
-```
-
-**可用命令**：
-```bash
-task build        # 构建当前平台
-task test         # 运行测试
-task clean        # 清理构建文件
-task deps         # 下载依赖
-task run          # 运行服务器
-```
-
-**查看版本信息**：
-```bash
-# 方式1：使用二进制文件
-./cangjie-mem -version
-
-# 方式2：直接运行
-go run ./cmd/server -version
-```
-
-访问 [Releases](https://github.com/ystyle/cangjie-mem/releases) 下载对应平台的二进制文件。
-
-### 使用 Docker 部署
-
-Docker 部署是最简单的方式，适合快速启动和生产环境。
-
-#### 方式 1：使用 Docker（推荐）
+### 方式 1：Docker Compose（最简单，推荐）
 
 ```bash
-# 1. 拉取镜像
-docker pull ghcr.io/ystyle/cangjie-mem:latest
+# 创建 docker-compose.yml
+cat > docker-compose.yml <<'EOF'
+version: '3.8'
 
-# 2. 运行容器（无认证）
-docker run -d \
-  --name cangjie-mem \
-  -p 8080:8080 \
-  -v cangjie-data:/home/cangjie/.cangjie-mem \
-  ghcr.io/ystyle/cangjie-mem:latest
+services:
+  cangjie-mem:
+    image: ghcr.io/ystyle/cangjie-mem:1.0.0
+    container_name: cangjie-mem
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - CANGJIE_HTTP=true
+      # - CANGJIE_TOKEN=your-secret-token  # 可选：启用认证
+    volumes:
+      - cangjie-data:/home/cangjie/.cangjie-mem
 
-# 3. 运行容器（带 Token 认证）
-docker run -d \
-  --name cangjie-mem \
-  -p 8080:8080 \
-  -v cangjie-data:/home/cangjie/.cangjie-mem \
-  ghcr.io/ystyle/cangjie-mem:latest \
-  -http -addr :8080 -token "your-secret-token"
+volumes:
+  cangjie-data:
+EOF
 
-# 4. 查看日志
-docker logs -f cangjie-mem
-
-# 5. 停止容器
-docker stop cangjie-mem
-```
-
-#### 方式 2：使用 Docker Compose（最简单）
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/ystyle/cangjie-mem.git
-cd cangjie-mem
-
-# 2. 启动服务
+# 启动服务
 docker-compose up -d
 
-# 3. 查看日志
+# 查看日志
 docker-compose logs -f
 
-# 4. 停止服务
+# 停止服务
 docker-compose down
 ```
 
-#### 方式 3：本地构建 Docker 镜像
+### 方式 2：Docker Run
 
 ```bash
-# 使用 Task
-task docker-build
-task docker-run
-
-# 或使用 docker 命令
-docker build -t cangjie-mem:latest .
-docker run -d --name cangjie-mem -p 8080:8080 cangjie-mem:latest
+docker run -d \
+  --name cangjie-mem \
+  -p 8080:8080 \
+  -v cangjie-data:/home/cangjie/.cangjie-mem \
+  -e CANGJIE_HTTP=true \
+  ghcr.io/ystyle/cangjie-mem:1.0.0
 ```
 
-**Docker 环境变量**：
+### 方式 3：下载预编译二进制文件
 
+访问 [GitHub Releases](https://github.com/ystyle/cangjie-mem/releases) 下载对应平台的二进制文件：
+
+**Linux**：
 ```bash
-# 在 docker run 或 docker-compose.yml 中设置
--e DB_PATH=/custom/path/memory.db
+# 下载（以 Linux AMD64 为例）
+wget https://github.com/ystyle/cangjie-mem/releases/download/1.0.0/cangjie-mem-linux-amd64.tar.gz
+
+# 解压
+tar xzf cangjie-mem-linux-amd64.tar.gz
+
+# 运行
+./cangjie-mem-linux-amd64
 ```
 
-**数据持久化**：
+**Windows**：
+```powershell
+# 下载（使用 PowerShell）
+Invoke-WebRequest -Uri "https://github.com/ystyle/cangjie-mem/releases/download/1.0.0/cangjie-mem-windows-amd64.tar.gz" -OutFile "cangjie-mem-windows-amd64.tar.gz"
 
-- 数据库位置：`/home/cangjie/.cangjie-mem/memory.db`
-- 建议挂载 volume 或 bind mount 保存数据
-- 示例：`-v /host/path:/home/cangjie/.cangjie-mem`
+# 解压（需要 tar 工具，Windows 10+ 内置）
+tar xzf cangjie-mem-windows-amd64.tar.gz
 
-**健康检查**：
+# 运行
+.\cangjie-mem-windows-amd64.exe
+```
 
+**macOS**：
 ```bash
-# 检查容器状态
-docker ps
-curl http://localhost:8080/mcp
+# 下载
+curl -LO https://github.com/ystyle/cangjie-mem/releases/download/1.0.0/cangjie-mem-linux-amd64.tar.gz
+
+# 解压
+tar xzf cangjie-mem-linux-amd64.tar.gz
+
+# 运行
+./cangjie-mem-linux-amd64
 ```
 
 ### 配置 Claude Code
@@ -204,21 +127,34 @@ curl http://localhost:8080/mcp
 **macOS/Linux**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
 
+**stdio 模式（本地开发）**：
 ```json
 {
   "mcpServers": {
     "cangjie-mem": {
-      "command": "/usr/local/bin/cangjie-mem",
+      "command": "/path/to/cangjie-mem-linux-amd64",
       "env": {
-        "DB_PATH": "/Users/yourname/.cangjie-mem/memory.db",
-        "LOG_LEVEL": "info"
+        "CANGJIE_DB_PATH": "/path/to/.cangjie-mem/memory.db"
       }
     }
   }
 }
 ```
 
-### 重启 Claude Code
+**HTTP 模式（Docker 部署）**：
+```json
+{
+  "mcpServers": {
+    "cangjie-mem": {
+      "transport": "http",
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "X-MCP-Token": "your-secret-token"  // 如果启用了认证
+      }
+    }
+  }
+}
+```
 
 配置完成后，重启 Claude Code 即可开始使用！
 
@@ -233,33 +169,49 @@ cangjie-mem 支持两种启动模式：
 本地模式，由 Claude Code 作为子进程启动：
 
 ```bash
-# 直接运行（默认 stdio 模式）
-cangjie-mem
+# 直接运行
+./cangjie-mem-linux-amd64
 
-# 或使用 Task
-task run
+# 指定数据库路径
+./cangjie-mem-linux-amd64 -db /custom/path/memory.db
+
+# 使用环境变量
+CANGJIE_DB_PATH=/custom/path/memory.db ./cangjie-mem-linux-amd64
 ```
 
 #### 2. HTTP 模式（Streamable HTTP）
 
 远程服务器模式，可以通过网络访问：
 
+**命令行参数方式**：
 ```bash
-# 启动 HTTP 服务器（默认端口 8080）
-cangjie-mem -http
+# 启动 HTTP 服务器
+./cangjie-mem-linux-amd64 -http
 
 # 自定义监听地址
-cangjie-mem -http -addr :9090
+./cangjie-mem-linux-amd64 -http -addr :9090
+
+# 启用 Token 认证
+./cangjie-mem-linux-amd64 -http -addr :8080 -token "your-secret-token"
 
 # 无状态模式（适合多实例部署）
-cangjie-mem -http -addr :8080 -stateless
+./cangjie-mem-linux-amd64 -http -addr :8080 -stateless
+```
 
-# 启用 Token 认证（推荐！）
-cangjie-mem -http -addr :8080 -token "your-secret-token"
+**环境变量方式**：
+```bash
+# 启用 HTTP 模式
+export CANGJIE_HTTP=true
+./cangjie-mem-linux-amd64
 
-# 或使用 Task
-task run-http
-task run-http-auth  # 带 Token 认证
+# 完整配置
+export CANGJIE_HTTP=true
+export CANGJIE_ADDR=:8080
+export CANGJIE_TOKEN=your-secret-token
+./cangjie-mem-linux-amd64
+
+# 或一行命令
+CANGJIE_HTTP=true CANGJIE_ADDR=:8080 CANGJIE_TOKEN=xxx ./cangjie-mem-linux-amd64
 ```
 
 **⚠️ 安全提示**：
@@ -272,76 +224,75 @@ task run-http-auth  # 带 Token 认证
 - 团队协作，共享仓颉语言知识库
 - 远程访问，跨网络环境使用
 
-### 配置 Claude Code
+## 💻 开发者指南
 
-#### stdio 模式配置
+### 从源码编译
 
-在 Claude Code 的配置文件中添加：
+项目使用 [Task](https://taskfile.dev/) 作为构建工具：
 
-**macOS/Linux**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "cangjie-mem": {
-      "command": "/usr/local/bin/cangjie-mem",
-      "env": {
-        "DB_PATH": "/Users/yourname/.cangjie-mem/memory.db",
-        "LOG_LEVEL": "info"
-      }
-    }
-  }
-}
-```
-
-#### HTTP 模式配置
-
-对于远程 HTTP 服务器，使用 `--transport http` 参数：
-
-**无认证（不推荐）**：
-
-```json
-{
-  "mcpServers": {
-    "cangjie-mem-remote": {
-      "transport": "http",
-      "url": "http://your-server:8080/mcp"
-    }
-  }
-}
-```
-
-**带 Token 认证（推荐）**：
-
-```json
-{
-  "mcpServers": {
-    "cangjie-mem-remote": {
-      "transport": "http",
-      "url": "http://your-server:8080/mcp",
-      "headers": {
-        "X-MCP-Token": "your-secret-token"
-      }
-    }
-  }
-}
-```
-
-**使用 Claude Code CLI 添加**：
-
+**安装 Task**（可选）：
 ```bash
-# 无认证添加
-claude mcp add --transport http cangjie-mem http://localhost:8080/mcp
+# Linux/macOS
+brew install go-task/tap/go-task
 
-# 带认证添加（需要手动配置文件添加 headers）
-claude mcp add --transport http cangjie-mem http://localhost:8080/mcp
-# 然后编辑配置文件，添加 "headers" 字段
+# 或使用安装脚本
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+# Windows
+scoop install task
+# 或
+choco install go-task
 ```
 
-### 配置 Claude Code
+**编译项目**：
+```bash
+# 克隆仓库
+git clone https://github.com/ystyle/cangjie-mem.git
+cd cangjie-mem
 
-配置完成后，重启 Claude Code 即可开始使用！
+# 使用 Task 编译
+task build
+
+# 或使用 Go 命令
+go build -o cangjie-mem ./cmd/server
+
+# 运行
+task run
+# 或
+./cangjie-mem
+```
+
+**可用命令**：
+```bash
+task build        # 构建当前平台
+task test         # 运行测试
+task clean        # 清理构建文件
+task deps         # 下载依赖
+task run          # 运行服务器（stdio 模式）
+task run-http     # 运行服务器（HTTP 模式）
+```
+
+**Docker 本地构建**：
+```bash
+# 构建镜像
+docker build -t cangjie-mem:latest .
+
+# 运行容器
+docker run -d --name cangjie-mem -p 8080:8080 \
+  -e CANGJIE_HTTP=true \
+  cangjie-mem:latest
+```
+
+**Docker 环境变量**：
+
+| 环境变量 | 说明 | 默认值 | 必需 |
+|---------|------|--------|------|
+| `CANGJIE_HTTP` | 启用 HTTP 模式 | `false` | ✅ Docker 部署必需 |
+| `CANGJIE_ADDR` | HTTP 监听地址 | `:8080` | 否 |
+| `CANGJIE_ENDPOINT` | HTTP 端点路径 | `/mcp` | 否 |
+| `CANGJIE_TOKEN` | HTTP 认证 Token | 空 | 否 |
+| `CANGJIE_STATELESS` | 无状态模式 | `false` | 否 |
+| `CANGJIE_DB_PATH` | 数据库文件路径 | `~/.cangjie-mem/memory.db` | 否 |
 
 ## 🛠️ MCP 工具
 

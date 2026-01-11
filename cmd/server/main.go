@@ -5,11 +5,28 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/ystyle/cangjie-mem/pkg/mcp"
 	"github.com/ystyle/cangjie-mem/pkg/version"
 )
+
+// getEnvOrDefault 获取环境变量，如果不存在则返回默认值
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// getEnvBool 获取布尔环境变量
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		return strings.ToLower(value) == "true" || value == "1"
+	}
+	return defaultValue
+}
 
 func main() {
 	// 命令行参数
@@ -24,6 +41,26 @@ func main() {
 	httpToken := flag.String("token", "", "HTTP 认证 Token（留空则不启用认证）")
 
 	flag.Parse()
+
+	// 环境变量覆盖（优先级高于命令行参数）
+	if envDB := getEnvOrDefault("CANGJIE_DB_PATH", *dbPath); envDB != "" {
+		dbPath = &envDB
+	}
+	if envHTTP := getEnvBool("CANGJIE_HTTP", *httpMode); envHTTP {
+		httpMode = &envHTTP
+	}
+	if envAddr := getEnvOrDefault("CANGJIE_ADDR", *httpAddr); envAddr != "" {
+		httpAddr = &envAddr
+	}
+	if envEndpoint := getEnvOrDefault("CANGJIE_ENDPOINT", *httpEndpoint); envEndpoint != "" {
+		httpEndpoint = &envEndpoint
+	}
+	if envStateless := getEnvBool("CANGJIE_STATELESS", *stateless); envStateless {
+		stateless = &envStateless
+	}
+	if envToken := getEnvOrDefault("CANGJIE_TOKEN", *httpToken); envToken != "" {
+		httpToken = &envToken
+	}
 
 	if *showVersion {
 		fmt.Printf("cangjie-mem %s\n", version.Version)
