@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# 文档
+*.md
+!README.md
+LICENSE
+
+# 构建产物
+cangjie-mem
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 临时文件
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode
+.idea
+*.iml
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 测试
+*.test
+coverage.txt
+.clangd
+
+# Task
+Taskfile.yaml
+
+# Node (如果有)
+node_modules
+npm-debug.log
+
+# 数据库（不要打包到镜像）
+*.db
+*.db-shm
+*.db-wal
+
+# CI/CD
+.github

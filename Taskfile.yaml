@@ -1,0 +1,87 @@
+version: '3'
+
+vars:
+  BINARY: cangjie-mem
+  BUILD_TAGS: sqlite_fts5
+  DEFAULT_TOKEN: your-secret-token-here
+
+tasks:
+  build:
+    desc: Build binary
+    cmds:
+      - go build -tags {{.BUILD_TAGS}} -o {{.BINARY}} ./cmd/server
+
+  clean:
+    desc: Clean build files
+    cmds:
+      - rm -f {{.BINARY}}
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v ./...
+
+  deps:
+    desc: Download dependencies
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  run:
+    desc: Run server (stdio mode)
+    cmds:
+      - go run -tags {{.BUILD_TAGS}} ./cmd/server
+
+  run-http:
+    desc: Run HTTP server on :8080
+    cmds:
+      - go run -tags {{.BUILD_TAGS}} ./cmd/server -http -addr :8080
+
+  run-http-stateless:
+    desc: Run HTTP server in stateless mode
+    cmds:
+      - go run -tags {{.BUILD_TAGS}} ./cmd/server -http -addr :8080 -stateless
+
+  run-http-auth:
+    desc: Run HTTP server with Token authentication
+    cmds:
+      - go run -tags {{.BUILD_TAGS}} ./cmd/server -http -addr :8080 -token {{.DEFAULT_TOKEN}}
+
+  # Docker 任务
+  docker-build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t cangjie-mem:latest .
+
+  docker-run:
+    desc: Run Docker container (HTTP mode, no auth)
+    cmds:
+      - docker run -d --name cangjie-mem -p 8080:8080 -v cangjie-data:/home/cangjie/.cangjie-mem cangjie-mem:latest
+
+  docker-run-auth:
+    desc: Run Docker container with Token authentication
+    cmds:
+      - docker run -d --name cangjie-mem -p 8080:8080 -v cangjie-data:/home/cangjie/.cangjie-mem cangjie-mem:latest -http -addr :8080 -token {{.DEFAULT_TOKEN}}
+
+  docker-stop:
+    desc: Stop and remove Docker container
+    cmds:
+      - docker stop cangjie-mem || true
+      - docker rm cangjie-mem || true
+
+  docker-compose-up:
+    desc: Start with docker-compose
+    cmds:
+      - docker-compose up -d
+
+  docker-compose-down:
+    desc: Stop with docker-compose
+    cmds:
+      - docker-compose down
+
+  docker-clean:
+    desc: Remove Docker image and volume
+    cmds:
+      - task: docker-stop
+      - docker rmi cangjie-mem:latest || true
+      - docker volume rm cangjie-data || true

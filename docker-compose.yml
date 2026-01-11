@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  cangjie-mem:
+    image: ystyle/cangjie-mem:latest
+    container_name: cangjie-mem
+    restart: unless-stopped
+
+    # 端口映射
+    ports:
+      - "8080:8080"
+
+    # 环境变量
+    environment:
+      # 可选：启用 Token 认证
+      # - CANGJIE_TOKEN=your-secret-token
+
+    # 数据卷（持久化数据库）
+    volumes:
+      - cangjie-data:/home/cangjie/.cangjie-mem
+
+    # 启动参数（可通过 docker-compose.yml 覆盖）
+    command:
+      - "-http"
+      - "-addr"
+      - ":8080"
+      # 启用 Token 认证（取消注释并修改）
+      # - "-token"
+      # - "your-secret-token"
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/mcp"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # 日志
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  cangjie-data:
+    driver: local
