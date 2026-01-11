@@ -502,59 +502,6 @@ cangjie-mem/
 └── README.md            # 本文件
 ```
 
-## 📊 数据模型
-
-### 记忆层级
-
-```sql
-CREATE TABLE knowledge_base (
-    id INTEGER PRIMARY KEY,
-    level TEXT NOT NULL,              -- 'language' | 'project' | 'library'
-    language_tag TEXT NOT NULL,       -- 'cangjie'
-    project_path_pattern TEXT,        -- 项目路径模式（通配符支持）
-    title TEXT NOT NULL,              -- 标题
-    content TEXT NOT NULL,            -- 内容
-    summary TEXT,                     -- 摘要
-    source TEXT,                      -- 'manual' | 'auto_captured'
-    access_count INTEGER DEFAULT 0,   -- 访问次数
-    confidence REAL DEFAULT 1.0,      -- 置信度
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    last_accessed_at TIMESTAMP
-);
-```
-
-## 🔧 配置选项
-
-### 环境变量
-
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `DB_PATH` | 数据库文件路径 | `~/.cangjie-mem/memory.db` |
-| `LOG_LEVEL` | 日志级别 | `info` |
-
-### 命令行参数
-
-```bash
-cangjie-mem [options]
-
-Options:
-  -db string
-        数据库文件路径（默认 ~/.cangjie-mem/memory.db）
-  -version
-        显示版本信息
-  -http
-        启用 HTTP 模式（Streamable HTTP）
-  -addr string
-        HTTP 监听地址（默认 :8080）
-  -endpoint string
-        HTTP 端点路径（默认 /mcp）
-  -stateless
-        无状态模式（默认 false）
-  -token string
-        HTTP 认证 Token（留空则不启用认证）
-```
-
 ## 🚧 开发计划
 
 ### Phase 1：MVP ✅
