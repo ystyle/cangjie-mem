@@ -103,6 +103,7 @@ jobs:
         id: version
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#v}  # 去掉开头的 v（如果有）
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
