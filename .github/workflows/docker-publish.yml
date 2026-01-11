@@ -79,7 +79,7 @@ jobs:
 
   # 从 Docker 镜像提取二进制文件并上传到 Release
   extract-binaries-and-release:
-    needs: build
+    needs: [build, build-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -167,6 +167,73 @@ jobs:
           echo "✓ Cross-compiled Windows binary"
           ls -lh release/
 
+      - name: Download macOS binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-binaries
+          path: release/
+
+  # macOS 构建步骤
+  build-macos:
+    needs: build
+    runs-on: macos-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Build macOS binaries
+        run: |
+          mkdir -p release
+
+          # 设置 Go 代理
+          export GOPROXY=https://goproxy.cn,direct
+
+          # macOS AMD64 (Intel)
+          echo "Building for darwin/amd64..."
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 \
+            go build -tags sqlite_fts5 -ldflags="-s -w" \
+            -o release/cangjie-mem-darwin-amd64 ./cmd/server
+
+          # macOS ARM64 (Apple Silicon)
+          echo "Building for darwin/arm64..."
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 \
+            go build -tags sqlite_fts5 -ldflags="-s -w" \
+            -o release/cangjie-mem-darwin-arm64 ./cmd/server
+
+          # 打包
+          cd release
+          tar czf cangjie-mem-darwin-amd64.tar.gz cangjie-mem-darwin-amd64
+          tar czf cangjie-mem-darwin-arm64.tar.gz cangjie-mem-darwin-arm64
+          cd ..
+
+          echo "✓ Built macOS binaries"
+          ls -lh release/
+
+      - name: Upload macOS binaries as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binaries
+          path: release/*.tar.gz
+          retention-days: 1
+
       - name: Create Release and upload binaries
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -181,6 +248,7 @@ jobs:
           ### 🎉 功能特性
           - **Streamable HTTP 模式**：支持远程访问 MCP 服务器
           - **Token 认证**：简单有效的访问控制
+          - **多平台支持**：Linux / Windows / macOS (Intel + Apple Silicon)
           - **Docker 部署**：支持多平台（amd64/arm64）
           - **三级记忆模型**：language/project/library
           - **智能检索**：自动层级判断和置信度评分
@@ -209,6 +277,10 @@ jobs:
 
           **Windows**：
           - \`cangjie-mem-windows-amd64.tar.gz\` - Windows x86_64
+
+          **macOS**：
+          - \`cangjie-mem-darwin-amd64.tar.gz\` - macOS Intel
+          - \`cangjie-mem-darwin-arm64.tar.gz\` - macOS Apple Silicon
 
           **使用方法**：
           \`\`\`bash

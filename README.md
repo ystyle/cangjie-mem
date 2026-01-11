@@ -12,8 +12,8 @@
 ### 分级记忆模型
 
 - **语言级（language）**：权威规范，包括语法、关键字、核心语义等
-- **项目级（project）**：具体上下文，包括项目结构、配置、业务逻辑等
 - **公共库级（library）**：可复用方案，包括工具函数、设计模式、最佳实践等
+- **项目级（project）**：具体上下文，包括项目结构、配置、业务逻辑等
 
 ### 智能检索
 
@@ -35,7 +35,89 @@
 
 ## 🚀 快速开始
 
-### 方式 1：Docker Compose（最简单，推荐）
+cangjie-mem 支持两种启动模式，根据使用场景选择：
+
+---
+
+### 模式 1：stdio 模式（本地使用）
+
+**适用场景**：个人开发，本地使用
+
+#### 1. 下载预编译二进制
+
+访问 [GitHub Releases](https://github.com/ystyle/cangjie-mem/releases) 下载对应平台的二进制文件。
+
+**Linux**：
+```bash
+# 下载（以 Linux AMD64 为例）
+wget https://github.com/ystyle/cangjie-mem/releases/download/v1.3.0/cangjie-mem-linux-amd64.tar.gz
+
+# 解压
+tar xzf cangjie-mem-linux-amd64.tar.gz
+
+# 运行（测试）
+./cangjie-mem-linux-amd64 -version
+```
+
+**Windows**：
+```powershell
+# 下载（使用 PowerShell）
+Invoke-WebRequest -Uri "https://github.com/ystyle/cangjie-mem/releases/download/v1.3.0/cangjie-mem-windows-amd64.tar.gz" -OutFile "cangjie-mem-windows-amd64.tar.gz"
+
+# 解压（需要 tar 工具，Windows 10+ 内置）
+tar xzf cangjie-mem-windows-amd64.tar.gz
+
+# 运行（测试）
+.\cangjie-mem-windows-amd64.exe -version
+```
+
+**macOS**：
+```bash
+# 下载（Apple Silicon M1/M2/M3）
+curl -LO https://github.com/ystyle/cangjie-mem/releases/download/v1.3.0/cangjie-mem-darwin-arm64.tar.gz
+
+# 或 Intel Mac
+# curl -LO https://github.com/ystyle/cangjie-mem/releases/download/v1.3.0/cangjie-mem-darwin-amd64.tar.gz
+
+# 解压
+tar xzf cangjie-mem-darwin-arm64.tar.gz
+
+# 运行（测试）
+./cangjie-mem-darwin-arm64 -version
+```
+
+#### 2. 配置 Claude Code
+
+在 Claude Code 的配置文件中添加：
+
+**Linux**: `~/.config/Claude/claude_desktop_config.json`
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "cangjie-mem": {
+      "command": "/path/to/cangjie-mem-linux-amd64",
+      "env": {
+        "CANGJIE_DB_PATH": "/path/to/.cangjie-mem/memory.db"
+      }
+    }
+  }
+}
+```
+
+> **提示**：将 `/path/to/cangjie-mem-linux-amd64` 替换为实际的二进制文件路径
+
+配置完成后，重启 Claude Code 即可开始使用！
+
+---
+
+### 模式 2：HTTP 模式（远程/服务器部署）
+
+**适用场景**：团队协作、多设备共享、远程访问
+
+#### 方式 1：Docker Compose（推荐）
 
 ```bash
 # 创建 docker-compose.yml
@@ -44,7 +126,7 @@ version: '3.8'
 
 services:
   cangjie-mem:
-    image: ghcr.io/ystyle/cangjie-mem:1.0.0
+    image: ghcr.io/ystyle/cangjie-mem:v1.3.0
     container_name: cangjie-mem
     restart: unless-stopped
     ports:
@@ -69,7 +151,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-### 方式 2：Docker Run
+#### 方式 2：Docker Run
 
 ```bash
 docker run -d \
@@ -77,71 +159,18 @@ docker run -d \
   -p 8080:8080 \
   -v cangjie-data:/home/cangjie/.cangjie-mem \
   -e CANGJIE_HTTP=true \
-  ghcr.io/ystyle/cangjie-mem:1.0.0
+  ghcr.io/ystyle/cangjie-mem:v1.3.0
 ```
 
-### 方式 3：下载预编译二进制文件
+**⚠️ 安全提示**：
+- **无 Token**：任何人都能访问，仅适合本地开发
+- **有 Token**：需要认证才能访问，适合内网使用
+- **生产环境**：建议启用 Token 并使用 HTTPS
 
-访问 [GitHub Releases](https://github.com/ystyle/cangjie-mem/releases) 下载对应平台的二进制文件：
-
-**Linux**：
-```bash
-# 下载（以 Linux AMD64 为例）
-wget https://github.com/ystyle/cangjie-mem/releases/download/1.0.0/cangjie-mem-linux-amd64.tar.gz
-
-# 解压
-tar xzf cangjie-mem-linux-amd64.tar.gz
-
-# 运行
-./cangjie-mem-linux-amd64
-```
-
-**Windows**：
-```powershell
-# 下载（使用 PowerShell）
-Invoke-WebRequest -Uri "https://github.com/ystyle/cangjie-mem/releases/download/1.0.0/cangjie-mem-windows-amd64.tar.gz" -OutFile "cangjie-mem-windows-amd64.tar.gz"
-
-# 解压（需要 tar 工具，Windows 10+ 内置）
-tar xzf cangjie-mem-windows-amd64.tar.gz
-
-# 运行
-.\cangjie-mem-windows-amd64.exe
-```
-
-**macOS**：
-```bash
-# 下载
-curl -LO https://github.com/ystyle/cangjie-mem/releases/download/1.0.0/cangjie-mem-linux-amd64.tar.gz
-
-# 解压
-tar xzf cangjie-mem-linux-amd64.tar.gz
-
-# 运行
-./cangjie-mem-linux-amd64
-```
-
-### 配置 Claude Code
+#### 3. 配置 Claude Code
 
 在 Claude Code 的配置文件中添加：
 
-**macOS/Linux**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-**stdio 模式（本地开发）**：
-```json
-{
-  "mcpServers": {
-    "cangjie-mem": {
-      "command": "/path/to/cangjie-mem-linux-amd64",
-      "env": {
-        "CANGJIE_DB_PATH": "/path/to/.cangjie-mem/memory.db"
-      }
-    }
-  }
-}
-```
-
-**HTTP 模式（Docker 部署）**：
 ```json
 {
   "mcpServers": {
@@ -149,80 +178,28 @@ tar xzf cangjie-mem-linux-amd64.tar.gz
       "transport": "http",
       "url": "http://localhost:8080/mcp",
       "headers": {
-        "X-MCP-Token": "your-secret-token"  // 如果启用了认证
+        "X-MCP-Token": "your-secret-token"
       }
     }
   }
 }
 ```
 
-配置完成后，重启 Claude Code 即可开始使用！
+> **提示**：如果启用了 Token 认证，需要在 `headers` 中添加 `X-MCP-Token`
 
-## 📖 使用方法
+---
 
-### 启动模式
+**两种模式对比**：
 
-cangjie-mem 支持两种启动模式：
+| 特性 | stdio 模式 | HTTP 模式 |
+|------|-----------|-----------|
+| **使用场景** | 个人本地开发 | 团队协作、远程访问 |
+| **启动方式** | Claude Code 自动启动 | Docker/手动启动服务 |
+| **配置难度** | 简单 | 需要配置服务器 |
+| **网络访问** | 本地 | 可远程访问 |
+| **数据共享** | 本地独占 | 多设备共享 |
 
-#### 1. stdio 模式（默认）
-
-本地模式，由 Claude Code 作为子进程启动：
-
-```bash
-# 直接运行
-./cangjie-mem-linux-amd64
-
-# 指定数据库路径
-./cangjie-mem-linux-amd64 -db /custom/path/memory.db
-
-# 使用环境变量
-CANGJIE_DB_PATH=/custom/path/memory.db ./cangjie-mem-linux-amd64
-```
-
-#### 2. HTTP 模式（Streamable HTTP）
-
-远程服务器模式，可以通过网络访问：
-
-**命令行参数方式**：
-```bash
-# 启动 HTTP 服务器
-./cangjie-mem-linux-amd64 -http
-
-# 自定义监听地址
-./cangjie-mem-linux-amd64 -http -addr :9090
-
-# 启用 Token 认证
-./cangjie-mem-linux-amd64 -http -addr :8080 -token "your-secret-token"
-
-# 无状态模式（适合多实例部署）
-./cangjie-mem-linux-amd64 -http -addr :8080 -stateless
-```
-
-**环境变量方式**：
-```bash
-# 启用 HTTP 模式
-export CANGJIE_HTTP=true
-./cangjie-mem-linux-amd64
-
-# 完整配置
-export CANGJIE_HTTP=true
-export CANGJIE_ADDR=:8080
-export CANGJIE_TOKEN=your-secret-token
-./cangjie-mem-linux-amd64
-
-# 或一行命令
-CANGJIE_HTTP=true CANGJIE_ADDR=:8080 CANGJIE_TOKEN=xxx ./cangjie-mem-linux-amd64
-```
-
-**⚠️ 安全提示**：
-- **无 Token**：任何人都能访问你的知识库，仅适合本地开发
-- **有 Token**：需要提供正确的 Token 才能访问，适合内网使用
-- **HTTPS**：生产环境强烈建议使用 HTTPS，防止 Token 被窃取
-
-**适用场景**：
-- 家庭服务器部署，多设备共享记忆库
-- 团队协作，共享仓颉语言知识库
-- 远程访问，跨网络环境使用
+---
 
 ## 💻 开发者指南
 
