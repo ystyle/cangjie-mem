@@ -153,25 +153,18 @@ jobs:
           # 设置 Go 代理
           export GOPROXY=https://goproxy.cn,direct
 
-          # Windows AMD64
+          # Windows AMD64（主流平台）
           echo "Cross-compiling for windows/amd64..."
           CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 \
             go build -tags sqlite_fts5 -ldflags="-s -w" \
             -o release/cangjie-mem-windows-amd64.exe ./cmd/server
 
-          # Windows ARM64
-          echo "Cross-compiling for windows/arm64..."
-          CGO_ENABLED=1 CC=aarch64-w64-mingw32-gcc GOOS=windows GOARCH=arm64 \
-            go build -tags sqlite_fts5 -ldflags="-s -w" \
-            -o release/cangjie-mem-windows-arm64.exe ./cmd/server
-
           # 打包
           cd release
           tar czf cangjie-mem-windows-amd64.tar.gz cangjie-mem-windows-amd64.exe
-          tar czf cangjie-mem-windows-arm64.tar.gz cangjie-mem-windows-arm64.exe
           cd ..
 
-          echo "✓ Cross-compiled Windows binaries"
+          echo "✓ Cross-compiled Windows binary"
           ls -lh release/
 
       - name: Create Release and upload binaries
@@ -216,7 +209,6 @@ jobs:
 
           **Windows**：
           - \`cangjie-mem-windows-amd64.tar.gz\` - Windows x86_64
-          - \`cangjie-mem-windows-arm64.tar.gz\` - Windows ARM64
 
           **使用方法**：
           \`\`\`bash
