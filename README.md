@@ -175,6 +175,34 @@ docker run -d \
 - **有 Token**：需要认证才能访问，适合内网使用
 - **生产环境**：建议启用 Token 并使用 HTTPS
 
+**Docker 环境变量**：
+
+| 环境变量 | 说明 | 默认值 | 必需 |
+|---------|------|--------|------|
+| `CANGJIE_HTTP` | 启用 HTTP 模式 | `false` | ✅ Docker 部署必需 |
+| `CANGJIE_ADDR` | HTTP 监听地址 | `:8080` | 否 |
+| `CANGJIE_ENDPOINT` | HTTP 端点路径 | `/mcp` | 否 |
+| `CANGJIE_TOKEN` | HTTP 认证 Token | 空 | 否 |
+| `CANGJIE_STATELESS` | 无状态模式 | `false` | 否 |
+| `CANGJIE_DB_PATH` | 数据库文件路径 | `~/.cangjie-mem/memory.db` | 否 |
+
+**使用环境变量的示例**：
+```bash
+# Docker Compose（在 docker-compose.yml 中设置）
+environment:
+  - CANGJIE_HTTP=true
+  - CANGJIE_ADDR=:8080
+  - CANGJIE_TOKEN=your-secret-token
+
+# Docker Run（通过 -e 参数）
+docker run -d \
+  --name cangjie-mem \
+  -p 8080:8080 \
+  -e CANGJIE_HTTP=true \
+  -e CANGJIE_TOKEN=your-secret-token \
+  ghcr.io/ystyle/cangjie-mem:v1.3.3
+```
+
 #### 3. 配置 Claude Code
 
 在 Claude Code 的配置文件中添加：
@@ -285,17 +313,6 @@ docker run -d --name cangjie-mem -p 8080:8080 \
   -e CANGJIE_HTTP=true \
   cangjie-mem:latest
 ```
-
-**Docker 环境变量**：
-
-| 环境变量 | 说明 | 默认值 | 必需 |
-|---------|------|--------|------|
-| `CANGJIE_HTTP` | 启用 HTTP 模式 | `false` | ✅ Docker 部署必需 |
-| `CANGJIE_ADDR` | HTTP 监听地址 | `:8080` | 否 |
-| `CANGJIE_ENDPOINT` | HTTP 端点路径 | `/mcp` | 否 |
-| `CANGJIE_TOKEN` | HTTP 认证 Token | 空 | 否 |
-| `CANGJIE_STATELESS` | 无状态模式 | `false` | 否 |
-| `CANGJIE_DB_PATH` | 数据库文件路径 | `~/.cangjie-mem/memory.db` | 否 |
 
 ## 🛠️ MCP 工具
 
