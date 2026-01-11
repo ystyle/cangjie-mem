@@ -55,8 +55,11 @@ func (s *Store) RecallMemories(req types.RecallRequest) (*types.RecallResponse, 
 		strategy = fmt.Sprintf("auto_determined_%s", level)
 	}
 
+	// 构建查询字符串（空格分隔的 AND 模式）
+	ftsQuery := s.buildFTSQuery(req.Query)
+
 	// 执行查询
-	results, err := s.db.Recall(req.Query, level, req.LanguageTag, req.ProjectContext, req.MaxResults*2)
+	results, err := s.db.Recall(ftsQuery, level, req.LanguageTag, req.ProjectContext, req.MaxResults*2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to recall memories: %w", err)
 	}
@@ -237,4 +240,20 @@ func (s *Store) filterAndSortResults(results []types.RecallResult, minConfidence
 	}
 
 	return filtered
+}
+
+// buildFTSQuery 构建 FTS5 查询字符串（空格分隔的 AND 模式）
+func (s *Store) buildFTSQuery(query string) string {
+	// 按空格分割查询
+	words := strings.Fields(query)
+
+	// 如果没有关键词或只有一个，直接返回
+	if len(words) <= 1 {
+		return query
+	}
+
+	// 用空格连接所有关键词（FTS5 默认 AND 模式）
+	cleanQuery := strings.Join(words, " ")
+
+	return cleanQuery
 }

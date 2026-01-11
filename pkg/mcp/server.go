@@ -101,14 +101,23 @@ func (s *Server) registerTools() {
 
 	// 工具 2: cangjie_mem_recall
 	recallTool := mcp.NewTool("cangjie_mem_recall",
-		mcp.WithDescription("智能回忆仓颉语言实践经验。使用场景：\n"+
-			"1. 查询仓颉语法/关键字 → 不传 project_context，AI 自动使用 language 级别记忆\n"+
-			"2. 查询项目特定配置 → 传 project_context，AI 自动使用 project 级别记忆\n"+
-			"3. 通用设计模式/最佳实践 → 不传 project_context，AI 使用 library 级别记忆\n\n"+
-			"提示：通常只需传 query，让 AI 自动判断层级和级别！"),
+		mcp.WithDescription("智能回忆仓颉语言实践经验（基于关键词全文搜索）。\n\n"+
+			"📌 搜索模式：使用**空格分隔的 AND 匹配**模式\n"+
+			"- 多个关键词必须**同时出现**才会匹配\n"+
+			"- 关键词越多，结果越精准\n"+
+			"- 建议：使用记忆中的核心关键词查询\n\n"+
+			"✅ 查询示例：\n"+
+			"- 「interface 接口 定义」→ 匹配同时包含这 3 个词的记忆\n"+
+			"- 「var 变量 声明」→ 匹配同时包含这 3 个词的记忆\n"+
+			"- 「log 日志 配置」→ 匹配包含这些词的配置相关记忆\n\n"+
+			"🎯 使用场景：\n"+
+			"1. 查询仓颉语法/关键字 → 不传 project_context，自动使用 language 级别\n"+
+			"2. 查询项目特定配置 → 传 project_context，自动使用 project 级别\n"+
+			"3. 通用设计模式/最佳实践 → 不传 project_context，使用 library 级别\n\n"+
+			"💡 提示：通常只需传 query，让 AI 自动判断层级！"),
 		mcp.WithString("query",
 			mcp.Required(),
-			mcp.Description("查询内容（如：仓颉语言如何定义接口？项目的日志配置在哪里？）"),
+			mcp.Description("查询内容（使用空格分隔的关键词，如：interface 接口 定义、var 变量 声明）"),
 		),
 		mcp.WithString("level",
 			mcp.Description("记忆层级（通常不需要传，让 AI 自动判断。强制指定时可选：language/project/library）"),
