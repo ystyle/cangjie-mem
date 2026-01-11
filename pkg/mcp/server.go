@@ -66,31 +66,34 @@ func New(cfg Config) (*Server, error) {
 func (s *Server) registerTools() {
 	// 工具 1: cangjie_mem_store
 	storeTool := mcp.NewTool("cangjie_mem_store",
-		mcp.WithDescription("存储仓颉语言的实践经验记忆（语言级/项目级/公共库级）"),
+		mcp.WithDescription("存储仓颉语言的实践经验记忆。支持三级记忆模型：\n"+
+			"- language：语言级（语法、关键字、核心语义）\n"+
+			"- project：项目级（项目配置、业务逻辑、约定）\n"+
+			"- library：公共库级（设计模式、工具函数、最佳实践）"),
 		mcp.WithString("level",
 			mcp.Required(),
-			mcp.Description("记忆层级"),
+			mcp.Description("记忆层级（必需：language/project/library）"),
 			mcp.Enum("language", "project", "library"),
 		),
 		mcp.WithString("language_tag",
 			mcp.Description("语言标签（默认 cangjie）"),
 		),
 		mcp.WithString("project_path_pattern",
-			mcp.Description("项目路径模式（project 层级必需）"),
+			mcp.Description("项目路径模式（project 层级必需，如：/path/to/project/*）"),
 		),
 		mcp.WithString("title",
 			mcp.Required(),
-			mcp.Description("记忆标题"),
+			mcp.Description("记忆标题（简短描述，如：接口定义方式、日志配置位置）"),
 		),
 		mcp.WithString("content",
 			mcp.Required(),
-			mcp.Description("记忆内容"),
+			mcp.Description("记忆内容（详细的实践经验、代码示例等）"),
 		),
 		mcp.WithString("summary",
-			mcp.Description("简短摘要（可选）"),
+			mcp.Description("简短摘要（可选，快速浏览时显示）"),
 		),
 		mcp.WithString("source",
-			mcp.Description("来源（manual 或 auto_captured，默认 manual）"),
+			mcp.Description("来源（manual 手动记录 或 auto_captured AI 捕获，默认 manual）"),
 			mcp.Enum("manual", "auto_captured"),
 		),
 	)
@@ -98,20 +101,24 @@ func (s *Server) registerTools() {
 
 	// 工具 2: cangjie_mem_recall
 	recallTool := mcp.NewTool("cangjie_mem_recall",
-		mcp.WithDescription("回忆仓颉语言相关的实践经验，根据项目上下文智能检索最相关记忆"),
+		mcp.WithDescription("智能回忆仓颉语言实践经验。使用场景：\n"+
+			"1. 查询仓颉语法/关键字 → 不传 project_context，AI 自动使用 language 级别记忆\n"+
+			"2. 查询项目特定配置 → 传 project_context，AI 自动使用 project 级别记忆\n"+
+			"3. 通用设计模式/最佳实践 → 不传 project_context，AI 使用 library 级别记忆\n\n"+
+			"提示：通常只需传 query，让 AI 自动判断层级和级别！"),
 		mcp.WithString("query",
 			mcp.Required(),
-			mcp.Description("查询内容"),
+			mcp.Description("查询内容（如：仓颉语言如何定义接口？项目的日志配置在哪里？）"),
 		),
 		mcp.WithString("level",
-			mcp.Description("记忆层级（可选，留空自动判断）"),
+			mcp.Description("记忆层级（通常不需要传，让 AI 自动判断。强制指定时可选：language/project/library）"),
 			mcp.Enum("language", "project", "library"),
 		),
 		mcp.WithString("language_tag",
-			mcp.Description("语言标签（默认 cangjie）"),
+			mcp.Description("语言标签（默认 cangjie，通常不需要传）"),
 		),
 		mcp.WithString("project_context",
-			mcp.Description("项目上下文路径（由 Claude Code 自动传入）"),
+			mcp.Description("项目路径（可选。不传时 AI 自动判断层级：通用问题→language，项目特定问题→project）"),
 		),
 		mcp.WithNumber("max_results",
 			mcp.Description("最大返回数量（默认 10）"),
