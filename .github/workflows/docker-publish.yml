@@ -78,3 +78,108 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+
+  # 从 Docker 镜像提取二进制文件并上传到 Release
+  extract-binaries-and-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Extract binaries from Docker images
+        run: |
+          set -e
+
+          # 创建输出目录
+          mkdir -p release
+
+          # 定义平台列表
+          declare -A platforms
+          platforms["amd64"]="linux/amd64"
+          platforms["arm64"]="linux/arm64"
+
+          # 为每个平台提取二进制文件
+          for arch in "${!platforms[@]}"; do
+            platform="${platforms[$arch]}"
+            image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
+
+            echo "Extracting binary for $platform ($arch)..."
+
+            # 创建容器并复制二进制文件
+            container_id=$(docker create --platform "$platform" "$image")
+            docker cp "$container_id:/app/cangjie-mem" "release/cangjie-mem-linux-$arch"
+            docker rm "$container_id"
+
+            # 打包
+            cd release
+            tar czf "cangjie-mem-linux-$arch.tar.gz" "cangjie-mem-linux-$arch"
+            cd ..
+
+            echo "✓ Extracted cangjie-mem-linux-$arch"
+          done
+
+          # 列出所有文件
+          ls -lh release/
+
+      - name: Create Release and upload binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ env.VERSION }}"
+
+          # 创建 Release
+          gh release create "$VERSION" \
+            --title "cangjie-mem $VERSION" \
+            --notes "## cangjie-mem $VERSION
+
+          ### 🎉 功能特性
+          - **Streamable HTTP 模式**：支持远程访问 MCP 服务器
+          - **Token 认证**：简单有效的访问控制
+          - **Docker 部署**：支持多平台（amd64/arm64）
+          - **三级记忆模型**：language/project/library
+          - **智能检索**：自动层级判断和置信度评分
+          - **SQLite FTS5**：高性能全文搜索
+
+          ### 📦 下载说明
+
+          **Docker 镜像**（推荐）：
+          \`\`\`bash
+          # 拉取镜像
+          docker pull ghcr.io/ystyle/cangjie-mem:$VERSION
+
+          # 运行（无认证）
+          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION
+
+          # 运行（带 Token）
+          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION \\
+            -http -addr :8080 -token \"your-secret-token\"
+          \`\`\`
+
+          **二进制文件**：
+          - \`cangjie-mem-linux-amd64.tar.gz\` - Linux x86_64
+          - \`cangjie-mem-linux-arm64.tar.gz\` - Linux ARM64
+
+          详细使用说明请查看 [README](https://github.com/ystyle/cangjie-mem)
+          " || true
+
+          # 上传二进制文件
+          for binary in release/*.tar.gz; do
+            echo "Uploading $binary..."
+            gh release upload "$VERSION" "$binary"
+          done
+
