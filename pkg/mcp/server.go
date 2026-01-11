@@ -69,7 +69,7 @@ func (s *Server) registerTools() {
 		mcp.WithDescription("存储仓颉语言的实践经验记忆。支持三级记忆模型：\n"+
 			"- language：语言级（语法、关键字、核心语义）\n"+
 			"- project：项目级（项目配置、业务逻辑、约定）\n"+
-			"- library：公共库级（设计模式、工具函数、最佳实践）"),
+			"- library：公共库级（设计模式、工具函数、最佳实践、第三方库用法）"),
 		mcp.WithString("level",
 			mcp.Required(),
 			mcp.Description("记忆层级（必需：language/project/library）"),
@@ -77,6 +77,9 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithString("language_tag",
 			mcp.Description("语言标签（默认 cangjie）"),
+		),
+		mcp.WithString("library_name",
+			mcp.Description("库名（可选，用于第三方库知识管理，如：tang、http-client）"),
 		),
 		mcp.WithString("project_path_pattern",
 			mcp.Description("项目路径模式（project 层级必需，如：/path/to/project/*）"),
@@ -137,6 +140,69 @@ func (s *Server) registerTools() {
 		),
 	)
 	s.server.AddTool(recallTool, s.handleRecallMemories)
+
+	// 工具 3: cangjie_mem_list
+	listTool := mcp.NewTool("cangjie_mem_list",
+		mcp.WithDescription("列出仓颉语言记忆，支持按层级、库名、项目路径筛选（不需要关键词）。\n\n"+
+			"✅ 使用场景：\n"+
+			"- 浏览特定库的所有知识点（如：tang 库的所有记忆）\n"+
+			"- 浏览特定项目的所有记忆\n"+
+			"- 浏览特定层级的所有记忆（如：所有语言级记忆）\n\n"+
+			"💡 提示：这是浏览功能，不需要关键词。如需搜索请使用 cangjie_mem_recall。"),
+		mcp.WithString("level",
+			mcp.Description("记忆层级（可选：language/project/library）"),
+			mcp.Enum("language", "project", "library"),
+		),
+		mcp.WithString("library_name",
+			mcp.Description("库名筛选（仅对 library 层级有效，如：tang）"),
+		),
+		mcp.WithString("project_path_pattern",
+			mcp.Description("项目路径模式筛选（如：/path/to/project/*）"),
+		),
+		mcp.WithString("language_tag",
+			mcp.Description("语言标签（默认 cangjie）"),
+		),
+		mcp.WithNumber("limit",
+			mcp.Description("返回数量（默认 20）"),
+		),
+		mcp.WithNumber("offset",
+			mcp.Description("分页偏移（默认 0）"),
+		),
+		mcp.WithString("order_by",
+			mcp.Description("排序字段（created_at/access_count/updated_at，默认 created_at）"),
+			mcp.Enum("created_at", "access_count", "updated_at"),
+		),
+	)
+	s.server.AddTool(listTool, s.handleListMemories)
+
+	// 工具 4: cangjie_mem_list_categories
+	categoriesTool := mcp.NewTool("cangjie_mem_list_categories",
+		mcp.WithDescription("列出所有的库和项目分类（仅返回名称和统计，不包含具体记忆）。\n\n"+
+			"✅ 使用场景：\n"+
+			"- 查看都记录了哪些第三方库及其知识点数量\n"+
+			"- 查看都有哪些项目及其记忆数量\n"+
+			"- 快速浏览知识库的整体结构\n\n"+
+			"💡 提示：返回格式如 {\"libraries\": [{\"name\": \"tang\", \"count\": 12}], \"projects\": [...]}"),
+		mcp.WithString("language_tag",
+			mcp.Description("语言标签（默认 cangjie）"),
+		),
+	)
+	s.server.AddTool(categoriesTool, s.handleListCategories)
+
+	// 工具 5: cangjie_mem_delete
+	deleteTool := mcp.NewTool("cangjie_mem_delete",
+		mcp.WithDescription("删除指定 ID 的记忆。\n\n"+
+			"✅ 使用场景：\n"+
+			"- 删除错误的记忆\n"+
+			"- 配合 cangjie_mem_list 实现\"更新\"效果（先删除旧记忆，再插入新记忆）\n"+
+			"- 提炼项目记忆为库级记忆后，删除原始项目记忆\n\n"+
+			"⚠️ 注意：删除操作不可逆，请谨慎使用！"),
+		mcp.WithNumber("id",
+			mcp.Required(),
+			mcp.Description("记忆 ID（必需）"),
+		),
+	)
+	s.server.AddTool(deleteTool, s.handleDeleteMemory)
 }
 
 // handleStoreMemory 处理存储记忆请求
@@ -168,7 +234,61 @@ func (s *Server) handleRecallMemories(ctx context.Context, request mcp.CallToolR
 	// 检索记忆
 	resp, err := s.store.RecallMemories(req)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to recall memories: %w", err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("failed to recall memories: %v", err)), nil
+	}
+
+	// 返回结果
+	return s.toolResult(resp)
+}
+
+// handleListMemories 处理列出记忆请求
+func (s *Server) handleListMemories(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// 解析参数
+	var req types.ListRequest
+	if err := s.parseRequest(request, &req); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid parameters: %v", err)), nil
+	}
+
+	// 列出记忆
+	resp, err := s.store.ListMemories(req)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list memories: %v", err)), nil
+	}
+
+	// 返回结果
+	return s.toolResult(resp)
+}
+
+// handleListCategories 处理列出分类请求
+func (s *Server) handleListCategories(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// 解析参数
+	var req types.ListCategoriesRequest
+	if err := s.parseRequest(request, &req); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid parameters: %v", err)), nil
+	}
+
+	// 列出分类
+	resp, err := s.store.ListCategories(req)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list categories: %v", err)), nil
+	}
+
+	// 返回结果
+	return s.toolResult(resp)
+}
+
+// handleDeleteMemory 处理删除记忆请求
+func (s *Server) handleDeleteMemory(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// 解析参数
+	var req types.DeleteRequest
+	if err := s.parseRequest(request, &req); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid parameters: %v", err)), nil
+	}
+
+	// 删除记忆
+	resp, err := s.store.DeleteMemory(req)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to delete memory: %v", err)), nil
 	}
 
 	// 返回结果

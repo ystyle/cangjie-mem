@@ -272,6 +272,24 @@ task run          # 运行服务器（stdio 模式）
 task run-http     # 运行服务器（HTTP 模式）
 ```
 
+**运行测试**：
+```bash
+# 使用 Task（推荐）
+task test
+
+# 或使用 Go 命令（需要 sqlite_fts5 编译标签）
+go test ./... -tags="sqlite_fts5"
+
+# 运行特定包的测试
+go test ./pkg/db -tags="sqlite_fts5"
+go test ./internal/store -tags="sqlite_fts5"
+
+# 查看详细测试输出
+go test ./... -tags="sqlite_fts5" -v
+```
+
+> **⚠️ 注意**：项目使用 SQLite FTS5 全文搜索功能，测试时需要添加 `-tags="sqlite_fts5"` 编译标签。
+
 **Docker 本地构建**：
 ```bash
 # 构建镜像
@@ -300,10 +318,19 @@ docker run -d --name cangjie-mem -p 8080:8080 \
 
 **`cangjie_mem_store`** - 存储仓颉语言的实践经验记忆
 
-**使用场景**：
-- 记录仓颉语言的语法规范
-- 保存项目特定的配置和约定
-- 积累通用的解决方案和最佳实践
+**支持三级记忆模型**：
+- `language`：语言级（语法、关键字、核心语义）
+- `project`：项目级（项目配置、业务逻辑、约定）
+- `library`：公共库级（设计模式、工具函数、第三方库用法）
+
+**参数**：
+- `level`（必需）：记忆层级（language/project/library）
+- `title`（必需）：记忆标题
+- `content`（必需）：记忆内容
+- `library_name`（可选）：库名（用于 library 层级，如：tang、http-client）
+- `project_path_pattern`（可选）：项目路径模式（project 层级必需）
+- `summary`（可选）：简短摘要
+- `source`（可选）：来源（manual 或 auto_captured）
 
 **示例**：
 
@@ -311,14 +338,24 @@ docker run -d --name cangjie-mem -p 8080:8080 \
 请帮我记录：仓颉语言中接口定义使用 'interface' 关键字，类似于 Java 的接口
 ```
 
+```
+存储：Tang 框架使用 RouterGroup 配置路由分组
+```
+
 ### 工具 2：回忆记忆（核心）
 
-**`cangjie_mem_recall`** - 智能检索最相关的仓颉语言记忆
+**`cangjie_mem_recall`** - 基于关键词智能检索仓颉语言记忆
 
-**使用场景**：
-- 查询项目特定的配置和约定
-- 回顾之前解决过的问题
-- 获取仓颉语言的实践经验
+**搜索模式**：使用**空格分隔的 AND 匹配**
+- 多个关键词必须**同时出现**才会匹配
+- 关键词越多，结果越精准
+
+**参数**：
+- `query`（必需）：查询内容（空格分隔的关键词）
+- `level`（可选）：记忆层级（通常让 AI 自动判断）
+- `project_context`（可选）：项目路径
+- `max_results`（可选）：最大返回数量（默认 10）
+- `min_confidence`（可选）：最小置信度（默认 0.5）
 
 **示例**：
 
@@ -332,6 +369,84 @@ docker run -d --name cangjie-mem -p 8080:8080 \
 
 ```
 怎么用仓颉处理 JSON 数据？
+```
+
+```
+tang 路由 中间件  # 搜索同时包含 "tang"、"路由"、"中间件" 的记忆
+```
+
+### 工具 3：列出记忆
+
+**`cangjie_mem_list`** - 浏览记忆，支持按层级、库名、项目路径筛选
+
+**使用场景**：
+- 浏览特定库的所有知识点（如：tang 库的所有记忆）
+- 浏览特定项目的所有记忆
+- 浏览特定层级的所有记忆
+
+**参数**：
+- `level`（可选）：记忆层级（language/project/library）
+- `library_name`（可选）：库名筛选（如：tang）
+- `project_path_pattern`（可选）：项目路径模式筛选
+- `limit`（可选）：返回数量（默认 20）
+- `offset`（可选）：分页偏移（默认 0）
+- `order_by`（可选）：排序字段（created_at/access_count/updated_at）
+
+**示例**：
+
+```
+列出所有 tang 库相关的记忆
+```
+
+```
+列出所有项目级的记忆
+```
+
+```
+列出最近访问最多的 10 条记忆
+```
+
+### 工具 4：列出分类
+
+**`cangjie_mem_list_categories`** - 列出所有库和项目分类（仅返回名称和统计）
+
+**使用场景**：
+- 查看都记录了哪些第三方库及其知识点数量
+- 查看都有哪些项目及其记忆数量
+- 快速浏览知识库的整体结构
+
+**参数**：
+- `language_tag`（可选）：语言标签（默认 cangjie）
+
+**返回格式**：
+```json
+{
+  "libraries": [
+    {"name": "tang", "count": 12},
+    {"name": "http-client", "count": 5}
+  ],
+  "projects": [
+    {"name": "/home/user/tang-web/*", "count": 15}
+  ]
+}
+```
+
+### 工具 5：删除记忆
+
+**`cangjie_mem_delete`** - 删除指定 ID 的记忆
+
+**使用场景**：
+- 删除错误的记忆
+- 配合 `cangjie_mem_list` 实现"更新"效果（先删除旧记忆，再插入新记忆）
+- 提炼项目记忆为库级记忆后，删除原始项目记忆
+
+**参数**：
+- `id`（必需）：记忆 ID
+
+**示例**：
+
+```
+删除 ID 为 123 的记忆
 ```
 
 ## 🎨 使用示例

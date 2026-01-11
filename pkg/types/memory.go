@@ -24,6 +24,7 @@ type Memory struct {
 	ID                 int64            `json:"id"`
 	Level              KnowledgeLevel   `json:"level"`
 	LanguageTag        string           `json:"language_tag"`
+	LibraryName        string           `json:"library_name,omitempty"`
 	ProjectPathPattern string           `json:"project_path_pattern,omitempty"`
 	Title              string           `json:"title"`
 	Content            string           `json:"content"`
@@ -40,6 +41,7 @@ type Memory struct {
 type StoreRequest struct {
 	Level              KnowledgeLevel  `json:"level" mcp:"required"`
 	LanguageTag        string          `json:"language_tag"`
+	LibraryName        string          `json:"library_name,omitempty"`
 	ProjectPathPattern string          `json:"project_path_pattern,omitempty"`
 	Title              string          `json:"title" mcp:"required"`
 	Content            string          `json:"content" mcp:"required"`
@@ -71,6 +73,7 @@ type RecallResult struct {
 	Title               string         `json:"title"`
 	Content             string         `json:"content"`
 	Summary             string         `json:"summary,omitempty"`
+	LibraryName         string         `json:"library_name,omitempty"`
 	ProjectPathPattern  string         `json:"project_path_pattern,omitempty"`
 	Source              KnowledgeSource `json:"source"`
 	Confidence          float64        `json:"confidence"`
@@ -120,4 +123,50 @@ func (s KnowledgeSource) IsValid() bool {
 	default:
 		return false
 	}
+}
+
+// ListRequest 列出请求
+type ListRequest struct {
+	Level              string `json:"level,omitempty"`                // 可选：language/project/library
+	LibraryName        string `json:"library_name,omitempty"`         // 可选：库名筛选
+	ProjectPathPattern string `json:"project_path_pattern,omitempty"` // 可选：项目路径筛选
+	LanguageTag        string `json:"language_tag,omitempty"`         // 可选：语言标签
+	Limit              int    `json:"limit,omitempty"`                // 可选：返回数量，默认20
+	Offset             int    `json:"offset,omitempty"`               // 可选：分页偏移
+	OrderBy            string `json:"order_by,omitempty"`             // 可选：排序字段
+}
+
+// ListResponse 列出响应
+type ListResponse struct {
+	Total   int            `json:"total"`
+	Results []RecallResult `json:"results"`
+}
+
+// CategoryInfo 分类信息
+type CategoryInfo struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// ListCategoriesRequest 分类列表请求
+type ListCategoriesRequest struct {
+	LanguageTag string `json:"language_tag,omitempty"` // 可选：按语言筛选
+}
+
+// ListCategoriesResponse 分类列表响应
+type ListCategoriesResponse struct {
+	Libraries []CategoryInfo `json:"libraries"` // 所有库及其记忆数
+	Projects  []CategoryInfo `json:"projects"`  // 所有项目及其记忆数
+}
+
+// DeleteRequest 删除请求
+type DeleteRequest struct {
+	ID int64 `json:"id" mcp:"required"`
+}
+
+// DeleteResponse 删除响应
+type DeleteResponse struct {
+	Success bool   `json:"success"`
+	ID      int64  `json:"id"`
+	Message string `json:"message"`
 }

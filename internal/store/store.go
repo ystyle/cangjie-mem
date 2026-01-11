@@ -257,3 +257,46 @@ func (s *Store) buildFTSQuery(query string) string {
 
 	return cleanQuery
 }
+
+// ListMemories 列出记忆
+func (s *Store) ListMemories(req types.ListRequest) (*types.ListResponse, error) {
+	// 设置默认值
+	if req.LanguageTag == "" {
+		req.LanguageTag = "cangjie"
+	}
+	if req.Limit <= 0 {
+		req.Limit = 20
+	}
+	if req.OrderBy == "" {
+		req.OrderBy = "created_at"
+	}
+
+	return s.db.List(req)
+}
+
+// ListCategories 列出所有库和项目分类
+func (s *Store) ListCategories(req types.ListCategoriesRequest) (*types.ListCategoriesResponse, error) {
+	if req.LanguageTag == "" {
+		req.LanguageTag = "cangjie"
+	}
+
+	return s.db.ListCategories(req.LanguageTag)
+}
+
+// DeleteMemory 删除记忆
+func (s *Store) DeleteMemory(req types.DeleteRequest) (*types.DeleteResponse, error) {
+	err := s.db.Delete(req.ID)
+	if err != nil {
+		return &types.DeleteResponse{
+			Success: false,
+			ID:      req.ID,
+			Message: fmt.Sprintf("删除记忆失败: %v", err),
+		}, err
+	}
+
+	return &types.DeleteResponse{
+		Success: true,
+		ID:      req.ID,
+		Message: "记忆已成功删除",
+	}, nil
+}
