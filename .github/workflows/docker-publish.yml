@@ -173,6 +173,75 @@ jobs:
           name: macos-binaries
           path: release/
 
+      - name: Create Release and upload binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ env.VERSION }}"
+
+          # 创建 Release
+          gh release create "$VERSION" \
+            --title "cangjie-mem $VERSION" \
+            --notes "## cangjie-mem $VERSION
+
+          ### 🎉 功能特性
+          - **Streamable HTTP 模式**：支持远程访问 MCP 服务器
+          - **Token 认证**：简单有效的访问控制
+          - **多平台支持**：Linux / Windows / macOS (Intel + Apple Silicon)
+          - **Docker 部署**：支持多平台（amd64/arm64）
+          - **三级记忆模型**：language/project/library
+          - **智能检索**：自动层级判断和置信度评分
+          - **SQLite FTS5**：高性能全文搜索
+
+          ### 📦 下载说明
+
+          **Docker 镜像**（推荐）：
+          \`\`\`bash
+          # 拉取镜像
+          docker pull ghcr.io/ystyle/cangjie-mem:$VERSION
+
+          # 运行（无认证）
+          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION
+
+          # 运行（带 Token）
+          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION \\
+            -http -addr :8080 -token \"your-secret-token\"
+          \`\`\`
+
+          **二进制文件**：
+
+          **Linux**：
+          - \`cangjie-mem-linux-amd64.tar.gz\` - Linux x86_64
+          - \`cangjie-mem-linux-arm64.tar.gz\` - Linux ARM64
+
+          **Windows**：
+          - \`cangjie-mem-windows-amd64.tar.gz\` - Windows x86_64
+
+          **macOS**：
+          - \`cangjie-mem-darwin-amd64.tar.gz\` - macOS Intel
+          - \`cangjie-mem-darwin-arm64.tar.gz\` - macOS Apple Silicon
+
+          **使用方法**：
+          \`\`\`bash
+          # 解压
+          tar xzf cangjie-mem-*.tar.gz
+
+          # 运行（Linux/macOS）
+          ./cangjie-mem-*
+
+          # 运行（Windows）
+          .\\cangjie-mem-*.exe
+          \`\`\`
+
+          详细使用说明请查看 [README](https://github.com/ystyle/cangjie-mem)
+          " || true
+
+          # 上传二进制文件
+          for binary in release/*.tar.gz; do
+            echo "Uploading $binary..."
+            gh release upload "$VERSION" "$binary"
+          done
+
   # macOS 构建步骤
   build-macos:
     needs: build
