@@ -142,6 +142,38 @@ jobs:
           # 列出所有文件
           ls -lh release/
 
+      - name: Cross-compile Windows binaries
+        run: |
+          set -e
+
+          # 安装 MinGW（Windows 交叉编译工具链）
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+
+          # 设置 Go 代理
+          export GOPROXY=https://goproxy.cn,direct
+
+          # Windows AMD64
+          echo "Cross-compiling for windows/amd64..."
+          CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 \
+            go build -tags sqlite_fts5 -ldflags="-s -w" \
+            -o release/cangjie-mem-windows-amd64.exe ./cmd/server
+
+          # Windows ARM64
+          echo "Cross-compiling for windows/arm64..."
+          CGO_ENABLED=1 CC=aarch64-w64-mingw32-gcc GOOS=windows GOARCH=arm64 \
+            go build -tags sqlite_fts5 -ldflags="-s -w" \
+            -o release/cangjie-mem-windows-arm64.exe ./cmd/server
+
+          # 打包
+          cd release
+          tar czf cangjie-mem-windows-amd64.tar.gz cangjie-mem-windows-amd64.exe
+          tar czf cangjie-mem-windows-arm64.tar.gz cangjie-mem-windows-arm64.exe
+          cd ..
+
+          echo "✓ Cross-compiled Windows binaries"
+          ls -lh release/
+
       - name: Create Release and upload binaries
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -177,8 +209,26 @@ jobs:
           \`\`\`
 
           **二进制文件**：
+
+          **Linux**：
           - \`cangjie-mem-linux-amd64.tar.gz\` - Linux x86_64
           - \`cangjie-mem-linux-arm64.tar.gz\` - Linux ARM64
+
+          **Windows**：
+          - \`cangjie-mem-windows-amd64.tar.gz\` - Windows x86_64
+          - \`cangjie-mem-windows-arm64.tar.gz\` - Windows ARM64
+
+          **使用方法**：
+          \`\`\`bash
+          # 解压
+          tar xzf cangjie-mem-*.tar.gz
+
+          # 运行（Linux/macOS）
+          ./cangjie-mem-*
+
+          # 运行（Windows）
+          .\\cangjie-mem-*.exe
+          \`\`\`
 
           详细使用说明请查看 [README](https://github.com/ystyle/cangjie-mem)
           " || true
