@@ -90,10 +90,18 @@ tar xzf cangjie-mem-darwin-arm64.tar.gz
 
 在 Claude Code 的配置文件中添加：
 
-**Linux**: `~/.config/Claude/claude_desktop_config.json`
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+**Claude CLI**：
+```bash
+# 编辑配置文件
+vi ~/.claude.json
+```
 
+**Claude Desktop**（GUI 应用）：
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+
+**stdio 模式配置示例**：
 ```json
 {
   "mcpServers": {
