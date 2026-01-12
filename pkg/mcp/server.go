@@ -148,7 +148,10 @@ func (s *Server) registerTools() {
 			"- 浏览特定库的所有知识点（如：tang 库的所有记忆）\n"+
 			"- 浏览特定项目的所有记忆\n"+
 			"- 浏览特定层级的所有记忆（如：所有语言级记忆）\n\n"+
-			"💡 提示：这是浏览功能，不需要关键词。如需搜索请使用 cangjie_mem_recall。"),
+			"💡 提示：这是浏览功能，不需要关键词。如需搜索请使用 cangjie_mem_recall。\n\n"+
+			"📝 参数说明：\n"+
+			"- brief=false（默认）：返回完整内容，适合查看具体知识点\n"+
+			"- brief=true：仅返回标题和摘要，适合快速浏览"),
 		mcp.WithString("level",
 			mcp.Description("记忆层级（可选：language/project/library）"),
 			mcp.Enum("language", "project", "library"),
@@ -171,6 +174,9 @@ func (s *Server) registerTools() {
 		mcp.WithString("order_by",
 			mcp.Description("排序字段（created_at/access_count/updated_at，默认 created_at）"),
 			mcp.Enum("created_at", "access_count", "updated_at"),
+		),
+		mcp.WithBoolean("brief",
+			mcp.Description("简洁模式（默认 false）。true 时仅返回标题和摘要，不返回完整内容"),
 		),
 	)
 	s.server.AddTool(listTool, s.handleListMemories)

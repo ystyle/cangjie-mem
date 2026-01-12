@@ -134,6 +134,7 @@ type ListRequest struct {
 	Limit              int    `json:"limit,omitempty"`                // 可选：返回数量，默认20
 	Offset             int    `json:"offset,omitempty"`               // 可选：分页偏移
 	OrderBy            string `json:"order_by,omitempty"`             // 可选：排序字段
+	Brief              bool   `json:"brief,omitempty"`                // 可选：简洁模式，默认false。true时仅返回标题和摘要，不返回完整内容
 }
 
 // ListResponse 列出响应

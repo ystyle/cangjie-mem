@@ -288,6 +288,142 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListBriefMode(t *testing.T) {
+	db := getTestDB(t)
+
+	// 存储测试数据
+	memories := []types.StoreRequest{
+		{
+			Level:       types.LevelLibrary,
+			LibraryName: "tang",
+			Title:       "Tang 路由",
+			Content:     "这是路由的详细配置内容，包含路由注册、中间件使用等",
+			Summary:     "路由配置方法",
+		},
+		{
+			Level:       types.LevelLibrary,
+			LibraryName: "http",
+			Title:       "HTTP 客户端",
+			Content:     "HTTP 请求发送的详细代码和注意事项",
+			Summary:     "HTTP 请求方法",
+		},
+	}
+
+	for _, mem := range memories {
+		_, err := db.Store(mem)
+		if err != nil {
+			t.Fatalf("failed to store test memory: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name         string
+		req          types.ListRequest
+		wantCount    int
+		checkContent bool // 是否检查 content 字段
+		contentEmpty bool // content 是否应该为空
+	}{
+		{
+			name: "详细模式：返回完整内容",
+			req: types.ListRequest{
+				Brief: false,
+				Limit: 10,
+			},
+			wantCount:    2,
+			checkContent: true,
+			contentEmpty: false,
+		},
+		{
+			name: "简洁模式：不返回内容",
+			req: types.ListRequest{
+				Brief: true,
+				Limit: 10,
+			},
+			wantCount:    2,
+			checkContent: true,
+			contentEmpty: true,
+		},
+		{
+			name: "默认模式：等同于详细模式",
+			req: types.ListRequest{
+				// 不传 Brief
+				Limit: 10,
+			},
+			wantCount:    2,
+			checkContent: true,
+			contentEmpty: false,
+		},
+		{
+			name: "简洁模式 + 库名筛选",
+			req: types.ListRequest{
+				Brief:       true,
+				LibraryName: "tang",
+			},
+			wantCount:    1,
+			checkContent: true,
+			contentEmpty: true,
+		},
+		{
+			name: "简洁模式 + 分页",
+			req: types.ListRequest{
+				Brief:  true,
+				Limit:  1,
+				Offset: 0,
+			},
+			wantCount:    1,
+			checkContent: true,
+			contentEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := db.List(tt.req)
+			if err != nil {
+				t.Fatalf("List() error = %v", err)
+			}
+
+			// 计算期望的 total
+			expectedTotal := 2
+			if tt.req.LibraryName != "" {
+				expectedTotal = 1 // tang 库只有 1 条
+			}
+
+			if resp.Total != expectedTotal {
+				t.Errorf("List() total = %v, want %d", resp.Total, expectedTotal)
+			}
+
+			if len(resp.Results) != tt.wantCount {
+				t.Errorf("List() results count = %v, want %d", len(resp.Results), tt.wantCount)
+			}
+
+			// 检查 content 字段
+			if tt.checkContent {
+				for _, r := range resp.Results {
+					if tt.contentEmpty {
+						if r.Content != "" {
+							t.Errorf("List() content should be empty in brief mode, got '%s'", r.Content)
+						}
+					} else {
+						if r.Content == "" {
+							t.Errorf("List() content should not be empty in detailed mode")
+						}
+					}
+				}
+			}
+
+			// 简洁模式下其他字段应该正常返回
+			if tt.req.Brief {
+				for _, r := range resp.Results {
+					if r.Title == "" {
+						t.Error("List() title should not be empty in brief mode")
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestListCategories(t *testing.T) {
 	db := getTestDB(t)
 

@@ -387,12 +387,19 @@ func (d *Database) List(req types.ListRequest) (*types.ListResponse, error) {
 		offset = req.Offset
 	}
 
+	// 构建查询字段（根据 brief 参数决定是否查询 content）
+	var selectFields string
+	if req.Brief {
+		// 简洁模式：不查询 content 字段
+		selectFields = "id, level, title, '' as content, summary, library_name, project_path_pattern, source, access_count, confidence"
+	} else {
+		// 详细模式：查询所有字段
+		selectFields = "id, level, title, content, summary, library_name, project_path_pattern, source, access_count, confidence"
+	}
+
 	// 查询数据
 	sqlQuery := `
-		SELECT
-			id, level, title, content, summary,
-			library_name, project_path_pattern, source,
-			access_count, confidence
+		SELECT ` + selectFields + `
 		FROM knowledge_base
 	` + whereClause + `
 		ORDER BY ` + orderBy + `
