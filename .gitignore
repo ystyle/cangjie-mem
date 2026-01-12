@@ -36,3 +36,9 @@ go.work
 # OS
 .DS_Store
 Thumbs.db
+
+# OpenSpec (change management)
+openspec/
+.claude/
+AGENTS.md
+CLAUDE.md
