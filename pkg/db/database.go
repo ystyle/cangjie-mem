@@ -56,6 +56,7 @@ func New(cfg Config) (*Database, error) {
 
 // init 初始化数据库表结构
 func (d *Database) init() error {
+	// 先创建基础表结构（不包含 library_name 索引）
 	schema := `
 	CREATE TABLE IF NOT EXISTS knowledge_base (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,7 +77,6 @@ func (d *Database) init() error {
 
 	CREATE INDEX IF NOT EXISTS idx_knowledge_level ON knowledge_base(level);
 	CREATE INDEX IF NOT EXISTS idx_knowledge_language ON knowledge_base(language_tag);
-	CREATE INDEX IF NOT EXISTS idx_knowledge_library ON knowledge_base(library_name);
 	CREATE INDEX IF NOT EXISTS idx_knowledge_project_pattern ON knowledge_base(project_path_pattern);
 	CREATE INDEX IF NOT EXISTS idx_knowledge_created_at ON knowledge_base(created_at DESC);
 
@@ -112,6 +112,7 @@ func (d *Database) init() error {
 	}
 
 	// 自动迁移：检查并添加 library_name 字段（兼容老数据库）
+	// 迁移函数会负责创建 library_name 索引
 	return d.migrateLibraryName()
 }
 
@@ -306,21 +307,25 @@ func (d *Database) migrateLibraryName() error {
 	`).Scan(&hasColumn)
 
 	if err != nil {
-		// pragma_table_info 可能失败，忽略错误（新数据库已有字段）
-		return nil
+		// pragma_table_info 查询失败（罕见），记录警告并强制执行迁移
+		fmt.Printf("Warning: failed to check library_name column: %v, attempting migration\n", err)
+		hasColumn = false // 强制执行迁移
 	}
 
 	if !hasColumn {
 		// 执行 ALTER TABLE 添加字段
 		_, err := d.db.Exec(`ALTER TABLE knowledge_base ADD COLUMN library_name TEXT`)
 		if err != nil {
-			return fmt.Errorf("failed to add library_name column: %w", err)
+			return fmt.Errorf("failed to add library_name column: %v", err)
 		}
+		fmt.Println("✓ Migrated database: added library_name column")
+
 		// 创建索引
 		_, err = d.db.Exec(`CREATE INDEX IF NOT EXISTS idx_knowledge_library ON knowledge_base(library_name)`)
 		if err != nil {
-			return fmt.Errorf("failed to create library_name index: %w", err)
+			return fmt.Errorf("failed to create library_name index: %v", err)
 		}
+		fmt.Println("✓ Migrated database: created library_name index")
 	}
 
 	return nil

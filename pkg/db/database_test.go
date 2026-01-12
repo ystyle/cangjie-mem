@@ -4,11 +4,13 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/ystyle/cangjie-mem/pkg/types"
 )
 
@@ -502,30 +504,222 @@ func TestUpdateAccessCount(t *testing.T) {
 }
 
 func TestMigration(t *testing.T) {
-	// 测试自动迁移功能
-	db := getTestDB(t)
+	t.Run("新数据库创建", func(t *testing.T) {
+		// 测试自动迁移功能
+		db := getTestDB(t)
 
-	// 验证 library_name 字段存在（通过插入带 library_name 的数据）
-	_, err := db.Store(types.StoreRequest{
-		Level:       types.LevelLibrary,
-		LibraryName: "migration-test",
-		Title:       "迁移测试",
-		Content:     "测试自动迁移",
+		// 验证 library_name 字段存在（通过插入带 library_name 的数据）
+		_, err := db.Store(types.StoreRequest{
+			Level:       types.LevelLibrary,
+			LibraryName: "migration-test",
+			Title:       "迁移测试",
+			Content:     "测试自动迁移",
+		})
+		if err != nil {
+			t.Errorf("Store() with library_name should work after migration: %v", err)
+		}
+
+		// 验证可以按库名查询
+		listResp, err := db.List(types.ListRequest{
+			LibraryName: "migration-test",
+		})
+		if err != nil {
+			t.Fatalf("List() by library_name failed: %v", err)
+		}
+
+		if listResp.Total != 1 {
+			t.Errorf("List() total = %v, want 1", listResp.Total)
+		}
 	})
-	if err != nil {
-		t.Errorf("Store() with library_name should work after migration: %v", err)
-	}
 
-	// 验证可以按库名查询
-	listResp, err := db.List(types.ListRequest{
-		LibraryName: "migration-test",
+	t.Run("旧数据库迁移", func(t *testing.T) {
+		// 创建旧版本的数据库（没有 library_name 字段）
+		testDir := "./test-data"
+		oldDBPath := filepath.Join(testDir, fmt.Sprintf("%s_old.db", t.Name()))
+		if err := os.MkdirAll(testDir, 0755); err != nil {
+			t.Fatalf("failed to create test directory: %v", err)
+		}
+
+		// 清理旧数据库文件（如果存在）
+		os.Remove(oldDBPath)
+
+		// 创建旧版本数据库结构（v1.2.0）
+		oldDB, err := sql.Open("sqlite3", oldDBPath+"?_fk=1")
+		if err != nil {
+			t.Fatalf("failed to create old database: %v", err)
+		}
+
+		// 设置单写连接（SQLite 限制）
+		oldDB.SetMaxOpenConns(1)
+		oldDB.SetMaxIdleConns(1)
+
+		// 创建旧版本的表结构（不包含 library_name 字段）
+		oldSchema := `
+		CREATE TABLE IF NOT EXISTS knowledge_base (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			level TEXT NOT NULL CHECK (level IN ('language', 'project', 'library')),
+			language_tag TEXT NOT NULL DEFAULT 'cangjie',
+			project_path_pattern TEXT,
+			title TEXT NOT NULL,
+			content TEXT NOT NULL,
+			summary TEXT,
+			source TEXT CHECK (source IN ('manual', 'auto_captured')) DEFAULT 'manual',
+			access_count INTEGER DEFAULT 0,
+			confidence REAL DEFAULT 1.0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			last_accessed_at TIMESTAMP
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_knowledge_level ON knowledge_base(level);
+		CREATE INDEX IF NOT EXISTS idx_knowledge_language ON knowledge_base(language_tag);
+		CREATE INDEX IF NOT EXISTS idx_knowledge_project_pattern ON knowledge_base(project_path_pattern);
+		CREATE INDEX IF NOT EXISTS idx_knowledge_created_at ON knowledge_base(created_at DESC);
+
+		CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_base_fts USING fts5(
+			title,
+			content,
+			summary,
+			content=knowledge_base,
+			content_rowid=rowid
+		);
+
+		CREATE TRIGGER IF NOT EXISTS knowledge_base_ai AFTER INSERT ON knowledge_base BEGIN
+			INSERT INTO knowledge_base_fts(rowid, title, content, summary)
+			VALUES (new.id, new.title, new.content, new.summary);
+		END;
+
+		CREATE TRIGGER IF NOT EXISTS knowledge_base_ad AFTER DELETE ON knowledge_base BEGIN
+			INSERT INTO knowledge_base_fts(knowledge_base_fts, rowid, title, content, summary)
+			VALUES ('delete', old.id, old.title, old.content, old.summary);
+		END;
+
+		CREATE TRIGGER IF NOT EXISTS knowledge_base_au AFTER UPDATE ON knowledge_base BEGIN
+			INSERT INTO knowledge_base_fts(knowledge_base_fts, rowid, title, content, summary)
+			VALUES ('delete', old.id, old.title, old.content, old.summary);
+			INSERT INTO knowledge_base_fts(rowid, title, content, summary)
+			VALUES (new.id, new.title, new.content, new.summary);
+		END;
+		`
+		_, err = oldDB.Exec(oldSchema)
+		if err != nil {
+			oldDB.Close()
+			t.Fatalf("failed to create old schema: %v", err)
+		}
+
+		// 插入一些旧数据
+		_, err = oldDB.Exec(`
+			INSERT INTO knowledge_base (level, title, content)
+		 VALUES ('language', '仓颉基础语法', '变量声明的三种方式：var, let, const')
+		`)
+		if err != nil {
+			oldDB.Close()
+			t.Fatalf("failed to insert old data: %v", err)
+		}
+
+		// 关闭旧数据库
+		oldDB.Close()
+
+		// 现在使用新版本的 Database 打开旧数据库
+		// 这会触发自动迁移
+		newDB, err := New(Config{Path: oldDBPath})
+		if err != nil {
+			t.Fatalf("failed to open old database with new version: %v", err)
+		}
+		defer func() {
+			newDB.Close()
+			os.Remove(oldDBPath)
+		}()
+
+		// 验证 1: 可以查询旧数据
+		listResp, err := newDB.List(types.ListRequest{})
+		if err != nil {
+			t.Fatalf("List() failed after migration: %v", err)
+		}
+		if listResp.Total != 1 {
+			t.Errorf("List() total = %v, want 1", listResp.Total)
+		}
+
+		// 验证 2: 可以插入带 library_name 的数据
+		storeResp, err := newDB.Store(types.StoreRequest{
+			Level:       types.LevelLibrary,
+			LibraryName: "tang",
+			Title:       "Tang 路由",
+			Content:     "路由配置",
+		})
+		if err != nil {
+			t.Errorf("Store() with library_name should work after migration: %v", err)
+		} else {
+			t.Logf("✓ 成功插入带 library_name 的数据, ID=%d", storeResp.ID)
+		}
+
+		// 验证 3: 可以按 library_name 筛选
+		listResp, err = newDB.List(types.ListRequest{
+			LibraryName: "tang",
+		})
+		if err != nil {
+			t.Fatalf("List() by library_name failed: %v", err)
+		}
+		if listResp.Total != 1 {
+			t.Errorf("List() by library_name total = %v, want 1", listResp.Total)
+		}
+
+		// 验证 4: 直接查询数据库，确认 library_name 字段存在
+		var hasColumn bool
+		err = newDB.db.QueryRow(`
+			SELECT COUNT(*) > 0 FROM pragma_table_info('knowledge_base') WHERE name = 'library_name'
+		`).Scan(&hasColumn)
+		if err != nil {
+			t.Fatalf("failed to check library_name column: %v", err)
+		}
+		if !hasColumn {
+			t.Error("library_name column should exist after migration")
+		} else {
+			t.Logf("✓ library_name 字段已成功添加")
+		}
+
+		// 验证 5: 确认索引存在
+		var indexCount int
+		err = newDB.db.QueryRow(`
+			SELECT COUNT(*) FROM pragma_index_list('knowledge_base') WHERE name = 'idx_knowledge_library'
+		`).Scan(&indexCount)
+		if err != nil {
+			t.Fatalf("failed to check index: %v", err)
+		}
+		if indexCount != 1 {
+			t.Errorf("idx_knowledge_library index should exist, count=%d", indexCount)
+		} else {
+			t.Logf("✓ idx_knowledge_library 索引已成功创建")
+		}
 	})
-	if err != nil {
-		t.Fatalf("List() by library_name failed: %v", err)
-	}
 
-	if listResp.Total != 1 {
-		t.Errorf("List() total = %v, want 1", listResp.Total)
-	}
+	t.Run("迁移幂等性", func(t *testing.T) {
+		// 测试重复迁移不会报错
+		db := getTestDB(t)
+
+		// 第一次迁移已经在 init() 中执行
+		// 手动再次调用迁移函数
+		err := db.migrateLibraryName()
+		if err != nil {
+			t.Errorf("migrateLibraryName() should be idempotent, got error: %v", err)
+		}
+
+		// 第三次调用
+		err = db.migrateLibraryName()
+		if err != nil {
+			t.Errorf("migrateLibraryName() should be idempotent on repeated calls, got error: %v", err)
+		}
+
+		// 验证数据库功能正常
+		_, err = db.Store(types.StoreRequest{
+			Level:       types.LevelLibrary,
+			LibraryName: "idempotent-test",
+			Title:       "幂等性测试",
+			Content:     "测试重复迁移",
+		})
+		if err != nil {
+			t.Errorf("Store() should work after repeated migrations: %v", err)
+		}
+	})
 }
 
