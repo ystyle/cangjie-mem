@@ -1,5 +1,5 @@
 ## 前期准备
-- 需要安装配置好`cangjie-mem`
+- 需要安装配置好[`cangjie-mem`](README.md)
 
 ## 初始化仓颉基础语法书
 - 下载[cj_syntax.md](https://github.com/ystyle/cangjie-docs-mcp/blob/master/cj_syntax.md)
