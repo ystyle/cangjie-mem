@@ -237,6 +237,9 @@ docker run -d \
 
 ---
 
+## 最佳实践
+查看[最佳实践文档](https://github.com/ystyle/cangjie-mem/blob/master/best-practices.md) 理解使用方法
+
 ## 💻 开发者指南
 
 ### 从源码编译
