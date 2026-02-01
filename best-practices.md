@@ -34,7 +34,7 @@
 - 下载`git clone https://github.com/ystyle/tang`代码仓库
 - 在`tang`项目启动`claude code`然后把以下提示词发给AI:
   ```md
-  分析README.md、源码和docs下的文档，按不同的分类组织tang的资料并整理成cangje-mem的库级记忆，库名使用tang， 并全部记录到cangjie-mem里
+  分析README.md、源码和docs下的文档，按不同分类组织tang的资料并整理成cangje-mem的库级记忆，库名使用tang， 全部记录到cangjie-mem里
   ```
 
 
