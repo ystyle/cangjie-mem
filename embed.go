@@ -5,7 +5,7 @@ import (
 	"io/fs"
 )
 
-//go:embed web/dist
+//go:embed all:web/dist
 var webFS embed.FS
 
 // GetWebFS 获取嵌入的 Web 文件系统

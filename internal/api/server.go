@@ -156,14 +156,21 @@ func (s *Server) RegisterStatic(mux *http.ServeMux) {
 	// 创建文件服务器
 	fileServer := http.FileServer(http.FS(distFS))
 
-	// SPA 路由：对于非文件路径，返回 index.html
+	// SPA 路由：对所有请求，先尝试服务文件
+	// 如果是 SPA 路由（非文件路径），返回 index.html
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 尝试打开请求的文件
+		// 去掉前导斜杠
 		path := strings.TrimPrefix(r.URL.Path, "/")
-		if _, err := distFS.Open(path); err != nil {
+
+		// 尝试打开请求的文件
+		f, err := distFS.Open(path)
+		if err != nil {
 			// 文件不存在，对于 SPA 返回 index.html
 			r.URL.Path = "/"
+		} else {
+			f.Close()
 		}
+
 		fileServer.ServeHTTP(w, r)
 	}))
 
