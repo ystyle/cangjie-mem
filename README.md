@@ -60,11 +60,16 @@ volumes:
 
 ### 二进制部署
 
-访问 [GitHub Releases](https://github.com/ystyle/cangjie-mem/releases) 下载对应平台的二进制文件。
+访问 [GitHub Releases](https://github.com/ystyle/cangjie-mem/releases) 下载对应平台的最新版本二进制文件。
 
 ```bash
-# 下载并解压
+# 下载最新版本（自动跳转到最新版本）
 wget https://github.com/ystyle/cangjie-mem/releases/latest/download/cangjie-mem-linux-amd64.tar.gz
+
+# 或指定版本（如 v1.5.0）
+wget https://github.com/ystyle/cangjie-mem/releases/download/v1.5.0/cangjie-mem-linux-amd64.tar.gz
+
+# 解压
 tar xzf cangjie-mem-linux-amd64.tar.gz
 
 # 启动服务（启用 Web UI）
