@@ -392,6 +392,15 @@ func (s *Server) startServerWithHandler(addr string, handler http.Handler) error
 
 // Close 关闭服务器
 func (s *Server) Close() error {
-	// TODO: 关闭数据库连接
-	return nil
+	return s.store.Close()
+}
+
+// GetStore 获取 Store 实例
+func (s *Server) GetStore() *store.Store {
+	return s.store
+}
+
+// GetMCPServer 获取底层 MCPServer 实例
+func (s *Server) GetMCPServer() *server.MCPServer {
+	return s.server
 }

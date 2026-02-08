@@ -60,8 +60,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # 只在成功推送后运行扫描
-          call: set
 
       # 注释掉 Trivy 扫描，因为它在推送失败时会导致整个 workflow 失败
       # - name: Run Trivy vulnerability scanner

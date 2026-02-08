@@ -139,8 +139,8 @@ type ListRequest struct {
 
 // ListResponse 列出响应
 type ListResponse struct {
-	Total   int            `json:"total"`
-	Results []RecallResult `json:"results"`
+	Total   int      `json:"total"`
+	Results []Memory `json:"results"`
 }
 
 // CategoryInfo 分类信息
@@ -170,4 +170,57 @@ type DeleteResponse struct {
 	Success bool   `json:"success"`
 	ID      int64  `json:"id"`
 	Message string `json:"message"`
+}
+
+// PackageInfo 知识包信息
+type PackageInfo struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Author      string   `json:"author,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Version     string   `json:"version"`
+}
+
+// KnowledgePackage 知识包（导入/导出格式）
+type KnowledgePackage struct {
+	Version  string            `json:"version"`  // 格式版本
+	Package  PackageInfo       `json:"package"`  // 包信息
+	Memories []StoreRequest    `json:"memories"` // 记忆列表
+}
+
+// ExportRequest 导出请求
+type ExportRequest struct {
+	Level              string `json:"level,omitempty"`
+	LibraryName        string `json:"library_name,omitempty"`
+	ProjectPathPattern string `json:"project_path_pattern,omitempty"`
+	LanguageTag        string `json:"language_tag,omitempty"`
+}
+
+// ImportPreview 导入预览
+type ImportPreview struct {
+	ImportID  string         `json:"import_id"`  // 预览 ID
+	Total     int            `json:"total"`      // 总记忆数
+	ToAdd     int            `json:"to_add"`     // 将新增
+	ToUpdate  int            `json:"to_update"`  // 将更新
+	Conflicts []ConflictInfo `json:"conflicts"`  // 冲突列表
+}
+
+// ConflictInfo 冲突信息
+type ConflictInfo struct {
+	ExistingID  int64          `json:"existing_id"`  // 已存在记录的 ID
+	Title       string         `json:"title"`        // 标题
+	LibraryName string         `json:"library_name"` // 库名
+	Level       KnowledgeLevel `json:"level"`        // 层级
+}
+
+// ImportConfirmRequest 导入确认请求
+type ImportConfirmRequest struct {
+	ImportID string `json:"import_id"` // 预览 ID
+}
+
+// ImportResult 导入结果
+type ImportResult struct {
+	Added   int `json:"added"`   // 新增数量
+	Updated int `json:"updated"` // 更新数量
+	Total   int `json:"total"`   // 总数
 }
