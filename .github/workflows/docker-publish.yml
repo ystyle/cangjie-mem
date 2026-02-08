@@ -140,6 +140,21 @@ jobs:
           # 列出所有文件
           ls -lh release/
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm and build frontend
+        run: |
+          # 安装 pnpm
+          npm install -g pnpm
+
+          # 构建前端
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm build
+
       - name: Cross-compile Windows binaries
         run: |
           set -e
