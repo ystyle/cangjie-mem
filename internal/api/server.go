@@ -4,10 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -17,38 +17,29 @@ import (
 
 // Server API 服务器
 type Server struct {
-	store      *store.Store
-	webRootDir string // Web 静态文件根目录
-	apiUser    string
-	apiPass    string
+	store   *store.Store
+	webFS   fs.FS // Web 静态文件系统
+	apiUser string
+	apiPass string
 }
 
 // New 创建新的 API 服务器（需要数据库路径，用于兼容）
-func New(dbPath string) *Server {
-	// 获取 web 目录的绝对路径
-	// 从 internal/api 向上两级到项目根，然后进入 web/dist
-	baseDir, _ := os.Getwd()
-	webDistPath := filepath.Join(filepath.Dir(baseDir), "web", "dist")
-
+func New(dbPath string, webFS fs.FS) *Server {
 	return &Server{
-		store:      nil,
-		webRootDir: webDistPath,
-		apiUser:    os.Getenv("CANGJIE_API_BASIC_AUTH_USERNAME"),
-		apiPass:    os.Getenv("CANGJIE_API_BASIC_AUTH_PASSWORD"),
+		store:   nil,
+		webFS:   webFS,
+		apiUser: os.Getenv("CANGJIE_API_BASIC_AUTH_USERNAME"),
+		apiPass: os.Getenv("CANGJIE_API_BASIC_AUTH_PASSWORD"),
 	}
 }
 
 // NewWithStore 使用现有的 Store 创建 API 服务器
-func NewWithStore(store *store.Store) *Server {
-	// 获取 web 目录的绝对路径
-	baseDir, _ := os.Getwd()
-	webDistPath := filepath.Join(filepath.Dir(baseDir), "web", "dist")
-
+func NewWithStore(store *store.Store, webFS fs.FS) *Server {
 	return &Server{
-		store:      store,
-		webRootDir: webDistPath,
-		apiUser:    os.Getenv("CANGJIE_API_BASIC_AUTH_USERNAME"),
-		apiPass:    os.Getenv("CANGJIE_API_BASIC_AUTH_PASSWORD"),
+		store:   store,
+		webFS:   webFS,
+		apiUser: os.Getenv("CANGJIE_API_BASIC_AUTH_USERNAME"),
+		apiPass: os.Getenv("CANGJIE_API_BASIC_AUTH_PASSWORD"),
 	}
 }
 
@@ -150,21 +141,33 @@ func (s *Server) cors(next http.HandlerFunc) http.HandlerFunc {
 
 // RegisterStatic 注册静态文件服务
 func (s *Server) RegisterStatic(mux *http.ServeMux) {
-	// 使用文件系统提供静态文件
-	fileServer := http.FileServer(http.Dir(s.webRootDir))
+	if s.webFS == nil {
+		log.Println("⚠️  Web FS 未提供，跳过 Web UI 注册")
+		return
+	}
+
+	// 从传入的文件系统中获取 dist 子目录
+	distFS, err := fs.Sub(s.webFS, "dist")
+	if err != nil {
+		log.Printf("❌ 获取嵌入的 dist 目录失败: %v", err)
+		return
+	}
+
+	// 创建文件服务器
+	fileServer := http.FileServer(http.FS(distFS))
 
 	// SPA 路由：对于非文件路径，返回 index.html
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 尝试打开请求的文件
-		fullPath := filepath.Join(s.webRootDir, strings.TrimPrefix(r.URL.Path, "/"))
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if _, err := distFS.Open(path); err != nil {
 			// 文件不存在，对于 SPA 返回 index.html
 			r.URL.Path = "/"
 		}
 		fileServer.ServeHTTP(w, r)
 	}))
 
-	log.Printf("✓ Web UI 静态文件已注册: / (从 %s)", s.webRootDir)
+	log.Println("✓ Web UI 静态文件已注册: / (从嵌入的文件系统)")
 }
 
 // sendJSON 发送 JSON 响应

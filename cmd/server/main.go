@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/ystyle/cangjie-mem/internal/api"
 	"github.com/ystyle/cangjie-mem/pkg/mcp"
 	"github.com/ystyle/cangjie-mem/pkg/version"
+	"github.com/ystyle/cangjie-mem"
 )
 
 // getEnvOrDefault 获取环境变量，如果不存在则返回默认值
@@ -95,8 +97,13 @@ func main() {
 
 	// 检查是否启用多端点模式
 	if *enableAPI || *enableUI {
+		// 获取嵌入的 Web 文件系统
+		webFS, err := assets.GetWebFS()
+		if err != nil {
+			log.Fatalf("Failed to get embedded web files: %v", err)
+		}
 		// 多端点模式：使用统一的 HTTP 服务器
-		runMultiEndpointServer(server, *httpAddr, *httpEndpoint, *httpToken, *enableAPI, *enableUI, *stateless)
+		runMultiEndpointServer(server, *httpAddr, *httpEndpoint, *httpToken, *enableAPI, *enableUI, *stateless, webFS)
 	} else {
 		// 原有模式：仅 MCP
 		runLegacyServer(server, *httpMode, *httpAddr, *httpEndpoint, *httpToken, *stateless)
@@ -104,7 +111,7 @@ func main() {
 }
 
 // runMultiEndpointServer 运行多端点服务器（MCP + API + UI）
-func runMultiEndpointServer(mcpServer *mcp.Server, addr, mcpEndpoint, token string, enableAPI, enableUI, stateless bool) {
+func runMultiEndpointServer(mcpServer *mcp.Server, addr, mcpEndpoint, token string, enableAPI, enableUI, stateless bool, webFS fs.FS) {
 	mux := http.NewServeMux()
 
 	// 创建 MCP HTTP 处理器
@@ -124,8 +131,8 @@ func runMultiEndpointServer(mcpServer *mcp.Server, addr, mcpEndpoint, token stri
 
 	// 注册 REST API 端点和 Web UI
 	if enableAPI || enableUI {
-		// 创建 API 服务器（复用 store）
-		apiServer := api.NewWithStore(mcpServer.GetStore())
+		// 创建 API 服务器（复用 store 和 webFS）
+		apiServer := api.NewWithStore(mcpServer.GetStore(), webFS)
 
 		if enableAPI {
 			apiServer.RegisterRoutes(mux)
