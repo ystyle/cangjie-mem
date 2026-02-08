@@ -35,7 +35,7 @@ tasks:
   run-http:
     desc: Run HTTP server on :8080
     cmds:
-      - go run -tags {{.BUILD_TAGS}} ./cmd/server -http -addr :8080
+      - go run -tags {{.BUILD_TAGS}} ./cmd/server -http -api -ui -addr :8080
 
   run-http-stateless:
     desc: Run HTTP server in stateless mode

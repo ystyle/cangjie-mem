@@ -5,6 +5,7 @@ import (
 	"math"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ystyle/cangjie-mem/pkg/db"
 	"github.com/ystyle/cangjie-mem/pkg/types"
@@ -299,4 +300,49 @@ func (s *Store) DeleteMemory(req types.DeleteRequest) (*types.DeleteResponse, er
 		ID:      req.ID,
 		Message: "记忆已成功删除",
 	}, nil
+}
+
+// GetMemory 获取单个记忆
+func (s *Store) GetMemory(id int64) (*types.Memory, error) {
+	return s.db.GetByID(id)
+}
+
+// UpdateMemory 更新记忆
+func (s *Store) UpdateMemory(id int64, req types.StoreRequest) (*types.Memory, error) {
+	return s.db.Update(id, req)
+}
+
+// ExportMemories 导出记忆
+func (s *Store) ExportMemories(req types.ExportRequest) ([]types.StoreRequest, error) {
+	return s.db.ExportForImport(req)
+}
+
+// PreviewImport 预览导入（检测冲突）
+func (s *Store) PreviewImport(memories []types.StoreRequest) (*types.ImportPreview, error) {
+	// 检测冲突
+	conflicts, err := s.db.FindConflicts(memories)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find conflicts: %w", err)
+	}
+
+	// 生成预览 ID
+	importID := fmt.Sprintf("import-%d", time.Now().Unix())
+
+	return &types.ImportPreview{
+		ImportID:  importID,
+		Total:     len(memories),
+		ToAdd:     len(memories) - len(conflicts),
+		ToUpdate:  len(conflicts),
+		Conflicts: conflicts,
+	}, nil
+}
+
+// ImportMemories 导入记忆
+func (s *Store) ImportMemories(memories []types.StoreRequest) (*types.ImportResult, error) {
+	return s.db.ImportMemories(memories)
+}
+
+// Close 关闭数据库连接
+func (s *Store) Close() error {
+	return s.db.Close()
 }

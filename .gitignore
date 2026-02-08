@@ -5,6 +5,8 @@
 *.so
 *.dylib
 cangjie-mem
+node_modules
+dist
 
 # Test binary, built with `go test -c`
 *.test
@@ -42,3 +44,5 @@ openspec/
 .claude/
 AGENTS.md
 CLAUDE.md
+bun.lock
+*.heapsnapshot

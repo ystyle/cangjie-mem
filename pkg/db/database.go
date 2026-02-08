@@ -391,10 +391,10 @@ func (d *Database) List(req types.ListRequest) (*types.ListResponse, error) {
 	var selectFields string
 	if req.Brief {
 		// 简洁模式：不查询 content 字段
-		selectFields = "id, level, title, '' as content, summary, library_name, project_path_pattern, source, access_count, confidence"
+		selectFields = "id, level, language_tag, title, '' as content, summary, library_name, project_path_pattern, source, access_count, confidence, created_at, updated_at"
 	} else {
 		// 详细模式：查询所有字段
-		selectFields = "id, level, title, content, summary, library_name, project_path_pattern, source, access_count, confidence"
+		selectFields = "id, level, language_tag, title, content, summary, library_name, project_path_pattern, source, access_count, confidence, created_at, updated_at"
 	}
 
 	// 查询数据
@@ -413,31 +413,41 @@ func (d *Database) List(req types.ListRequest) (*types.ListResponse, error) {
 	}
 	defer rows.Close()
 
-	var results []types.RecallResult
+	var results []types.Memory
 	for rows.Next() {
-		var r types.RecallResult
+		var m types.Memory
 		var libraryName, pattern, summary sql.NullString
+		var languageTag sql.NullString
 
 		err := rows.Scan(
-			&r.ID, &r.Level, &r.Title, &r.Content, &summary,
-			&libraryName, &pattern, &r.Source,
-			&r.AccessCount, &r.Confidence,
+			&m.ID, &m.Level, &languageTag,
+			&m.Title, &m.Content, &summary,
+			&libraryName, &pattern,
+			&m.Source,
+			&m.AccessCount, &m.Confidence,
+			&m.CreatedAt, &m.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
+		// 处理可为空的字符串字段
+		if languageTag.Valid {
+			m.LanguageTag = languageTag.String
+		} else {
+			m.LanguageTag = "cangjie" // 默认值
+		}
 		if summary.Valid {
-			r.Summary = summary.String
+			m.Summary = summary.String
 		}
 		if libraryName.Valid {
-			r.LibraryName = libraryName.String
+			m.LibraryName = libraryName.String
 		}
 		if pattern.Valid {
-			r.ProjectPathPattern = pattern.String
+			m.ProjectPathPattern = pattern.String
 		}
 
-		results = append(results, r)
+		results = append(results, m)
 	}
 
 	return &types.ListResponse{
@@ -531,4 +541,215 @@ func (d *Database) Delete(id int64) error {
 	}
 
 	return nil
+}
+
+// Update 更新记忆
+func (d *Database) Update(id int64, req types.StoreRequest) (*types.Memory, error) {
+	// 验证层级
+	if !req.Level.IsValid() {
+		return nil, fmt.Errorf("invalid knowledge level: %s", req.Level)
+	}
+
+	// 项目级必须提供项目路径模式
+	if req.Level == types.LevelProject && req.ProjectPathPattern == "" {
+		return nil, fmt.Errorf("project_path_pattern is required for project level")
+	}
+
+	// 设置默认值
+	if req.LanguageTag == "" {
+		req.LanguageTag = "cangjie"
+	}
+	if req.Source == "" {
+		req.Source = types.SourceManual
+	}
+
+	// 执行更新
+	_, err := d.db.Exec(`
+		UPDATE knowledge_base
+		SET level = ?, language_tag = ?, library_name = ?, project_path_pattern = ?,
+		    title = ?, content = ?, summary = ?, source = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, req.Level, req.LanguageTag, req.LibraryName, req.ProjectPathPattern,
+		req.Title, req.Content, req.Summary, req.Source, id)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update memory: %w", err)
+	}
+
+	// 获取更新后的记录
+	return d.GetByID(id)
+}
+
+// ExportForImport 导出记忆用于导入（返回 StoreRequest 格式）
+func (d *Database) ExportForImport(req types.ExportRequest) ([]types.StoreRequest, error) {
+	// 构建查询条件
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+
+	if req.LanguageTag != "" {
+		whereClause += " AND language_tag = ?"
+		args = append(args, req.LanguageTag)
+	} else {
+		whereClause += " AND language_tag = ?"
+		args = append(args, "cangjie")
+	}
+
+	if req.Level != "" {
+		whereClause += " AND level = ?"
+		args = append(args, req.Level)
+	}
+
+	if req.LibraryName != "" {
+		whereClause += " AND library_name = ?"
+		args = append(args, req.LibraryName)
+	}
+
+	if req.ProjectPathPattern != "" {
+		whereClause += " AND project_path_pattern = ?"
+		args = append(args, req.ProjectPathPattern)
+	}
+
+	// 查询数据
+	sqlQuery := `
+		SELECT level, language_tag, library_name, project_path_pattern,
+		       title, content, summary, source
+		FROM knowledge_base
+	` + whereClause + `
+		ORDER BY created_at DESC
+	`
+
+	rows, err := d.db.Query(sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export memories: %w", err)
+	}
+	defer rows.Close()
+
+	var results []types.StoreRequest
+	for rows.Next() {
+		var r types.StoreRequest
+		var libraryName, pattern, summary sql.NullString
+		var source sql.NullString
+
+		err := rows.Scan(
+			&r.Level, &r.LanguageTag, &libraryName, &pattern,
+			&r.Title, &r.Content, &summary, &source,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		if libraryName.Valid {
+			r.LibraryName = libraryName.String
+		}
+		if pattern.Valid {
+			r.ProjectPathPattern = pattern.String
+		}
+		if summary.Valid {
+			r.Summary = summary.String
+		}
+		if source.Valid {
+			r.Source = types.KnowledgeSource(source.String)
+		}
+
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
+// FindConflicts 查找冲突（同库同标题）
+func (d *Database) FindConflicts(memories []types.StoreRequest) ([]types.ConflictInfo, error) {
+	var conflicts []types.ConflictInfo
+
+	for _, mem := range memories {
+		// 只对 library 层级检测冲突
+		if mem.Level != types.LevelLibrary || mem.LibraryName == "" {
+			continue
+		}
+
+		// 查找已存在的记录
+		var id int64
+		err := d.db.QueryRow(`
+			SELECT id FROM knowledge_base
+			WHERE level = ? AND library_name = ? AND title = ?
+			LIMIT 1
+		`, mem.Level, mem.LibraryName, mem.Title).Scan(&id)
+
+		if err == nil {
+			// 找到冲突
+			conflicts = append(conflicts, types.ConflictInfo{
+				ExistingID:  id,
+				Title:       mem.Title,
+				LibraryName: mem.LibraryName,
+				Level:       mem.Level,
+			})
+		}
+	}
+
+	return conflicts, nil
+}
+
+// ImportMemories 导入记忆（支持覆盖）
+func (d *Database) ImportMemories(memories []types.StoreRequest) (*types.ImportResult, error) {
+	added := 0
+	updated := 0
+
+	for _, mem := range memories {
+		// 设置默认值
+		if mem.LanguageTag == "" {
+			mem.LanguageTag = "cangjie"
+		}
+		if mem.Source == "" {
+			mem.Source = types.SourceManual
+		}
+
+		// 查找是否已存在（同库同标题）
+		var existingID int64
+		err := d.db.QueryRow(`
+			SELECT id FROM knowledge_base
+			WHERE level = ? AND library_name = ? AND title = ?
+			LIMIT 1
+		`, mem.Level, mem.LibraryName, mem.Title).Scan(&existingID)
+
+		if err == nil {
+			// 已存在，更新
+			_, err = d.db.Exec(`
+				UPDATE knowledge_base
+				SET language_tag = ?, project_path_pattern = ?,
+				    content = ?, summary = ?, source = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+			`, mem.LanguageTag, mem.ProjectPathPattern,
+				mem.Content, mem.Summary, mem.Source, existingID)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to update memory %s: %w", mem.Title, err)
+			}
+			updated++
+		} else {
+			// 不存在，插入
+			confidence := 1.0
+			if mem.Source == types.SourceAutoCaptured {
+				confidence = 0.7
+			}
+
+			_, err = d.db.Exec(`
+				INSERT INTO knowledge_base (
+					level, language_tag, library_name, project_path_pattern,
+					title, content, summary, source, confidence
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, mem.Level, mem.LanguageTag, mem.LibraryName, mem.ProjectPathPattern,
+				mem.Title, mem.Content, mem.Summary, mem.Source, confidence)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to insert memory %s: %w", mem.Title, err)
+			}
+			added++
+		}
+	}
+
+	return &types.ImportResult{
+		Added:   added,
+		Updated: updated,
+		Total:   added + updated,
+	}, nil
 }

@@ -17,6 +17,10 @@ services:
       - CANGJIE_HTTP=true
       # HTTP 监听地址（可选，默认 :8080）
       - CANGJIE_ADDR=:8080
+      # 启用 REST API
+      - CANGJIE_API_ENABLED=true
+      # 启用 Web UI
+      - CANGJIE_UI_ENABLED=true
       # 可选：启用 Token 认证（取消注释并修改）
       # - CANGJIE_TOKEN=your-secret-token
 
@@ -26,7 +30,7 @@ services:
 
     # 健康检查
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/mcp"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 3s
       retries: 3
