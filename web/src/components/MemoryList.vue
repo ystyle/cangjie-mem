@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog, NList, NListItem, NEmpty, NSpin, NButton, NTag, NText, NSpace, NInput, NSelect, NCard, NTooltip, NIcon } from 'naive-ui'
 import { SearchOutlined, FilterListOutlined, CloseOutlined, RefreshOutlined, AddCircleOutlined } from '@vicons/material'
 import { useMemoryStore } from '../stores/memory'
 import { useAppStore } from '../stores/app'
 import type { Memory } from '../types'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import 'dayjs/locale/zh-cn'
+
+// 配置 dayjs
+dayjs.extend(utc)
+dayjs.extend(relativeTime)
+dayjs.locale('zh-cn')
 
 const router = useRouter()
 const message = useMessage()
@@ -46,21 +55,39 @@ const levelTypes: Record<string, 'info' | 'success' | 'warning'> = {
 
 // 格式化日期
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const date = dayjs(dateStr)
+  const now = dayjs().startOf('day')
+  const targetDate = date.startOf('day')
 
-  if (days === 0) return '今天'
-  if (days === 1) return '昨天'
-  if (days < 7) return `${days} 天前`
-  return date.toLocaleDateString('zh-CN')
+  const diffDays = now.diff(targetDate, 'day')
+
+  let result: string
+  if (diffDays === 0) {
+    result = '今天'
+  } else if (diffDays === 1) {
+    result = '昨天'
+  } else if (diffDays < 7) {
+    result = `${diffDays} 天前`
+  } else {
+    result = date.format('YYYY-MM-DD')
+  }
+
+  return result
 }
 
 // 应用筛选条件
 async function applyFilters() {
-  const params: any = {}
+  // 构建完整的查询参数（明确设置所有可能冲突的字段，避免使用 currentParams 中的残留值）
+  const params: any = {
+    limit: 20,
+    offset: 0, // 重置分页
+    order_by: 'created_at',
+    level: undefined,
+    library_name: undefined,
+    project_path_pattern: undefined,
+  }
 
+  // 只设置当前激活的筛选条件
   if (selectedLevel.value) params.level = selectedLevel.value
   if (selectedLibrary.value) params.library_name = selectedLibrary.value
   if (selectedProject.value) params.project_path_pattern = selectedProject.value
@@ -92,8 +119,8 @@ async function applyFilters() {
           source: r.source,
           access_count: r.access_count,
           confidence: r.confidence,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          created_at: r.created_at || new Date().toISOString(),
+          updated_at: r.updated_at || new Date().toISOString(),
         }))
         memoryStore.total = data.data.total
       }
@@ -101,18 +128,16 @@ async function applyFilters() {
       message.error('搜索失败')
     }
   } else {
-    // 无关键词时使用 list API
+    // 无关键词时使用 list API，传递完整的查询参数
     await memoryStore.fetchMemories(params)
   }
 }
 
-// 防抖搜索
-let searchTimeout: ReturnType<typeof setTimeout> | null = null
-function onSearchInput() {
-  if (searchTimeout) clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
+// 搜索框失去焦点时搜索（如果有内容）
+function onSearchBlur() {
+  if (searchKeyword.value.trim()) {
     applyFilters()
-  }, 300)
+  }
 }
 
 // 清空筛选
@@ -127,13 +152,45 @@ function clearFilters() {
 // 切换层级筛选
 function toggleLevel(level: string) {
   if (selectedLevel.value === level) {
+    // 取消选中当前层级
     selectedLevel.value = null
   } else {
+    // 选中新层级
     selectedLevel.value = level
-    // 切换层级时清空不匹配的筛选
-    if (level !== 'library') selectedLibrary.value = null
-    if (level !== 'project') selectedProject.value = null
+    // 清空所有库和项目筛选
+    selectedLibrary.value = null
+    selectedProject.value = null
   }
+  // 手动触发筛选（不依赖 watch）
+  applyFilters()
+}
+
+// 选择库
+function onLibrarySelect(value: string | null) {
+  selectedLibrary.value = value
+  // 选择库时，自动切换到库级层级
+  if (value) {
+    selectedLevel.value = 'library'
+    selectedProject.value = null
+  } else if (selectedLevel.value === 'library') {
+    // 如果清空了库选择且当前是库级，也清空层级
+    selectedLevel.value = null
+  }
+  applyFilters()
+}
+
+// 选择项目
+function onProjectSelect(value: string | null) {
+  selectedProject.value = value
+  // 选择项目时，自动切换到项目级层级
+  if (value) {
+    selectedLevel.value = 'project'
+    selectedLibrary.value = null
+  } else if (selectedLevel.value === 'project') {
+    // 如果清空了项目选择且当前是项目级，也清空层级
+    selectedLevel.value = null
+  }
+  applyFilters()
 }
 
 // 查看详情
@@ -190,11 +247,11 @@ async function loadFilterOptions() {
     const response = await fetch('/api/categories')
     const data = await response.json()
     if (data.success) {
-      availableLibraries.value = data.data.libraries.map((lib: any) => ({
+      availableLibraries.value = (data.data.libraries || []).map((lib: any) => ({
         label: lib.name,
         value: lib.name,
       }))
-      availableProjects.value = data.data.projects.map((proj: any) => ({
+      availableProjects.value = (data.data.projects || []).map((proj: any) => ({
         label: proj.name,
         value: proj.name,
       }))
@@ -214,21 +271,65 @@ const activeFilterCount = computed(() => {
   return count
 })
 
-// 监听筛选条件变化
-watch([selectedLevel, selectedLibrary, selectedProject], () => {
-  applyFilters()
-})
-
 // 组件挂载时加载数据
 onMounted(async () => {
+  console.log('=== MemoryList onMounted ===')
+  console.log('appStore:', appStore)
+  console.log('appStore.$state:', appStore.$state)
+  console.log('typeof appStore.selectedLevel:', typeof appStore.selectedLevel)
+  console.log('appStore.selectedLevel value:', appStore.selectedLevel)
+
   await loadFilterOptions()
-  if (memoryStore.memories.length === 0) {
+
+  // Pinia store 的状态在 $state 中
+  const level = appStore.$state.selectedLevel
+  const library = appStore.$state.selectedLibrary
+  const project = appStore.$state.selectedProject
+
+  console.log('level from $state:', level)
+  console.log('library from $state:', library)
+  console.log('project from $state:', project)
+
+  const hasFiltersFromCategories = Boolean(level || library || project)
+
+  console.log('hasFiltersFromCategories:', hasFiltersFromCategories)
+
+  if (hasFiltersFromCategories) {
+    // 从 Categories 跳转过来，应用筛选条件
+    selectedLevel.value = level || null
+    selectedLibrary.value = library || null
+    selectedProject.value = project || null
+
+    console.log('Applied filters from appStore:')
+    console.log('  selectedLevel:', selectedLevel.value)
+    console.log('  selectedLibrary:', selectedLibrary.value)
+    console.log('  selectedProject:', selectedProject.value)
+
+    // 清空 appStore 的筛选条件（避免重复应用）
+    appStore.resetFilters()
+
+    // 立即应用筛选
+    await applyFilters()
+  } else {
+    console.log('No filters from Categories, resetting all states')
+
+    // 直接访问，重置所有状态
+    memoryStore.reset()
+    searchKeyword.value = ''
+    selectedLevel.value = null
+    selectedLibrary.value = null
+    selectedProject.value = null
+
+    // 加载记忆列表
     try {
+      console.log('Calling fetchMemories() with no filters...')
       await memoryStore.fetchMemories()
     } catch (error) {
       message.error('加载失败')
     }
   }
+
+  console.log('=== MemoryList onMounted end ===')
 })
 </script>
 
@@ -240,10 +341,11 @@ onMounted(async () => {
       <div class="search-box">
         <NInput
           v-model:value="searchKeyword"
-          placeholder="搜索记忆..."
+          placeholder="搜索记忆... (按回车搜索)"
           clearable
           size="large"
-          @input="onSearchInput"
+          @keyup.enter="applyFilters"
+          @blur="onSearchBlur"
         >
           <template #prefix>
             <NIcon :component="SearchOutlined" />
@@ -323,7 +425,7 @@ onMounted(async () => {
               clearable
               filterable
               size="small"
-              @update:value="applyFilters"
+              @update:value="onLibrarySelect"
             />
           </div>
 
@@ -335,7 +437,7 @@ onMounted(async () => {
               clearable
               filterable
               size="small"
-              @update:value="applyFilters"
+              @update:value="onProjectSelect"
             />
           </div>
         </div>

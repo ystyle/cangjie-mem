@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@vicons/material": "^0.13.0",
+    "dayjs": "^1.11.19",
     "md-editor-v3": "^4.21.3",
     "naive-ui": "^2.43.2",
     "pinia": "^2.3.1",

@@ -128,7 +128,7 @@ export async function getMemories(params: {
     console.log('getMemories response:', result)
 
     // 将 RecallResult 转换为 Memory
-    const memories = result.results.map(recallResultToMemory)
+    const memories = (result.results || []).map(recallResultToMemory)
 
     return {
       total: result.total,
@@ -158,6 +158,8 @@ interface RecallResult {
   confidence: number
   access_count: number
   matched_text?: string
+  created_at?: string
+  updated_at?: string
 }
 
 // 将 RecallResult 转换为 Memory 的函数
@@ -165,7 +167,7 @@ function recallResultToMemory(result: RecallResult): Memory {
   return {
     id: result.id,
     level: result.level as any,
-    language_tag: 'cangjie', // 默认值
+    language_tag: 'cangjie',
     library_name: result.library_name,
     project_path_pattern: result.project_path_pattern,
     title: result.title,
@@ -174,8 +176,8 @@ function recallResultToMemory(result: RecallResult): Memory {
     source: result.source as any,
     access_count: result.access_count,
     confidence: result.confidence,
-    created_at: new Date().toISOString(), // 默认值
-    updated_at: new Date().toISOString(), // 默认值
+    created_at: result.created_at || new Date().toISOString(),
+    updated_at: result.updated_at || new Date().toISOString(),
     last_accessed_at: undefined,
   }
 }
@@ -199,6 +201,8 @@ interface RecallResponse {
     source: string
     confidence: number
     access_count: number
+    created_at?: string
+    updated_at?: string
   }>
   search_strategy: string
 }
