@@ -2,6 +2,8 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, NForm, NFormItem, NInput, NSelect, NButton, NSpace, NRadioGroup, NRadio } from 'naive-ui'
+import { MdEditor, ToolbarNames } from 'md-editor-v3'
+import 'md-editor-v3/lib/style.css'
 import { useMemoryStore } from '../stores/memory'
 import type { StoreRequest, KnowledgeLevel } from '../types'
 
@@ -39,6 +41,38 @@ const levelOptions = [
   { label: '公共库级', value: 'library' },
   { label: '项目级', value: 'project' },
   { label: '语言级', value: 'language' },
+]
+
+// Markdown 编辑器工具栏配置
+const toolbarItems: ToolbarNames[] = [
+  'bold',
+  'underline',
+  'italic',
+  'strikeThrough',
+  '-',
+  'title',
+  'sub',
+  'sup',
+  'quote',
+  'unorderedList',
+  'orderedList',
+  'task',
+  '-',
+  'codeRow',
+  'code',
+  'link',
+  'image',
+  'table',
+  '-',
+  'revoke',
+  'next',
+  'save',
+  '=',
+  'pageFullscreen',
+  'fullscreen',
+  'preview',
+  'htmlPreview',
+  'catalog',
 ]
 
 // 计算属性
@@ -171,12 +205,11 @@ function handleSaveAndContinue() {
 
       <!-- 内容 -->
       <NFormItem label="内容" path="content">
-        <NInput
-          v-model:value="formData.content"
-          type="textarea"
+        <MdEditor
+          v-model="formData.content"
           placeholder="详细的知识内容，支持 Markdown 格式"
-          :autosize="{ minRows: 6, maxRows: 15 }"
-          @keydown.enter.ctrl.prevent="handleSubmit"
+          :toolbars="toolbarItems"
+          :style="{ height: '400px' }"
         />
       </NFormItem>
 
@@ -207,12 +240,9 @@ function handleSaveAndContinue() {
 
 <style scoped>
 .memory-form {
-  max-width: 800px;
-  margin: 0 auto;
   background: white;
   padding: 24px;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .memory-form :deep(.n-form-item-label) {
@@ -222,5 +252,14 @@ function handleSaveAndContinue() {
 .memory-form :deep(.n-input),
 .memory-form :deep(.n-radio-group) {
   max-width: 100%;
+}
+
+/* Markdown 编辑器样式 */
+.memory-form :deep(.md-editor) {
+  border-radius: 8px;
+}
+
+.memory-form :deep(.md-editor-content) {
+  min-height: 300px;
 }
 </style>

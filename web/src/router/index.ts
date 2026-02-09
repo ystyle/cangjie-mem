@@ -13,17 +13,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/Memories.vue'),
     meta: { title: '记忆列表' }
   },
+  // 旧的编辑路由已废弃，功能已内联到记忆列表页面
   {
     path: '/memories/new',
-    name: 'memory-new',
-    component: () => import('../views/MemoryEdit.vue'),
-    meta: { title: '新建记忆' }
+    redirect: '/memories'
   },
   {
     path: '/memories/:id',
-    name: 'memory-edit',
-    component: () => import('../views/MemoryEdit.vue'),
-    meta: { title: '编辑记忆' }
+    redirect: '/memories'
   },
   {
     path: '/categories',

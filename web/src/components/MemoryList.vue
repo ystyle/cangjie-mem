@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog, NList, NListItem, NEmpty, NSpin, NButton, NTag, NText, NSpace, NInput, NSelect, NCard, NTooltip, NIcon } from 'naive-ui'
-import { SearchOutlined, FilterListOutlined, CloseOutlined, RefreshOutlined, AddCircleOutlined } from '@vicons/material'
+import { SearchOutlined, FilterListOutlined, CloseOutlined, RefreshOutlined, AddCircleOutlined, DoneOutlined } from '@vicons/material'
 import { useMemoryStore } from '../stores/memory'
 import { useAppStore } from '../stores/app'
-import type { Memory } from '../types'
+import MemoryForm from './MemoryForm.vue'
+import type { Memory, StoreRequest } from '../types'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -28,6 +29,12 @@ const selectedLevel = ref<string | null>(null)
 const selectedLibrary = ref<string | null>(null)
 const selectedProject = ref<string | null>(null)
 const showFilters = ref(false)
+
+// 编辑状态
+const editingMemory = ref<Memory | null>(null)
+const selectedMemoryId = ref<number | null>(null)
+const isCreating = ref(false)
+const formRef = ref()
 
 // 可用的筛选选项（从 categories 获取）
 const availableLibraries = ref<Array<{ label: string; value: string }>>([])
@@ -61,33 +68,135 @@ function formatDate(dateStr: string): string {
 
   const diffDays = now.diff(targetDate, 'day')
 
-  let result: string
   if (diffDays === 0) {
-    result = '今天'
+    return '今天'
   } else if (diffDays === 1) {
-    result = '昨天'
+    return '昨天'
   } else if (diffDays < 7) {
-    result = `${diffDays} 天前`
+    return `${diffDays} 天前`
   } else {
-    result = date.format('YYYY-MM-DD')
+    return date.format('YYYY-MM-DD')
   }
+}
 
-  return result
+// 检查记忆是否被选中
+function isSelected(memory: Memory): boolean {
+  return selectedMemoryId.value === memory.id
+}
+
+// 选择记忆进行编辑
+function selectMemory(memory: Memory) {
+  selectedMemoryId.value = memory.id
+  editingMemory.value = memory
+  isCreating.value = false
+}
+
+// 新建记忆
+function handleNew() {
+  selectedMemoryId.value = null
+  editingMemory.value = null
+  isCreating.value = true
+
+  // 移动端：滚动到编辑表单
+  if (window.innerWidth < 768) {
+    nextTick(() => {
+      const formSection = document.querySelector('.form-section')
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
+  }
+}
+
+// 保存记忆（新建或更新）
+async function handleSave(data: StoreRequest) {
+  try {
+    if (isCreating.value) {
+      // 新建
+      const response = await memoryStore.createMemory(data)
+      message.success('创建成功')
+
+      // 保持显示新创建的记忆
+      const newMemory: Memory = {
+        id: response.id,
+        level: data.level,
+        language_tag: data.language_tag,
+        library_name: data.library_name || '',
+        project_path_pattern: data.project_path_pattern || '',
+        title: data.title,
+        content: data.content,
+        summary: data.summary || '',
+        source: data.source,
+        access_count: 0,
+        confidence: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      editingMemory.value = newMemory
+      selectedMemoryId.value = newMemory.id
+      isCreating.value = false
+
+      // 刷新列表
+      await applyFilters()
+    } else if (editingMemory.value) {
+      // 更新
+      await memoryStore.updateMemory(editingMemory.value.id, data)
+      message.success('保存成功')
+
+      // 更新本地显示
+      editingMemory.value = {
+        ...editingMemory.value,
+        ...data,
+      }
+
+      // 刷新列表
+      await applyFilters()
+    }
+  } catch (error) {
+    // 错误已在 store 中处理
+  }
+}
+
+// 删除记忆
+function handleDelete(memory: Memory) {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除记忆"${memory.title}"吗？此操作不可恢复。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await memoryStore.deleteMemory(memory.id)
+        message.success('删除成功')
+
+        // 如果删除的是当前编辑的记忆，清空编辑表单
+        if (selectedMemoryId.value === memory.id) {
+          selectedMemoryId.value = null
+          editingMemory.value = null
+          isCreating.value = false
+        }
+
+        // 刷新列表
+        await applyFilters()
+      } catch (error) {
+        message.error('删除失败')
+      }
+    },
+  })
 }
 
 // 应用筛选条件
 async function applyFilters() {
-  // 构建完整的查询参数（明确设置所有可能冲突的字段，避免使用 currentParams 中的残留值）
   const params: any = {
     limit: 20,
-    offset: 0, // 重置分页
+    offset: 0,
     order_by: 'created_at',
     level: undefined,
     library_name: undefined,
     project_path_pattern: undefined,
   }
 
-  // 只设置当前激活的筛选条件
   if (selectedLevel.value) params.level = selectedLevel.value
   if (selectedLibrary.value) params.library_name = selectedLibrary.value
   if (selectedProject.value) params.project_path_pattern = selectedProject.value
@@ -106,7 +215,6 @@ async function applyFilters() {
       })
       const data = await response.json()
       if (data.success) {
-        // 将搜索结果转换为 Memory 格式
         memoryStore.memories = data.data.results.map((r: any) => ({
           id: r.id,
           level: r.level,
@@ -128,7 +236,6 @@ async function applyFilters() {
       message.error('搜索失败')
     }
   } else {
-    // 无关键词时使用 list API，传递完整的查询参数
     await memoryStore.fetchMemories(params)
   }
 }
@@ -152,28 +259,22 @@ function clearFilters() {
 // 切换层级筛选
 function toggleLevel(level: string) {
   if (selectedLevel.value === level) {
-    // 取消选中当前层级
     selectedLevel.value = null
   } else {
-    // 选中新层级
     selectedLevel.value = level
-    // 清空所有库和项目筛选
     selectedLibrary.value = null
     selectedProject.value = null
   }
-  // 手动触发筛选（不依赖 watch）
   applyFilters()
 }
 
 // 选择库
 function onLibrarySelect(value: string | null) {
   selectedLibrary.value = value
-  // 选择库时，自动切换到库级层级
   if (value) {
     selectedLevel.value = 'library'
     selectedProject.value = null
   } else if (selectedLevel.value === 'library') {
-    // 如果清空了库选择且当前是库级，也清空层级
     selectedLevel.value = null
   }
   applyFilters()
@@ -182,63 +283,23 @@ function onLibrarySelect(value: string | null) {
 // 选择项目
 function onProjectSelect(value: string | null) {
   selectedProject.value = value
-  // 选择项目时，自动切换到项目级层级
   if (value) {
     selectedLevel.value = 'project'
     selectedLibrary.value = null
   } else if (selectedLevel.value === 'project') {
-    // 如果清空了项目选择且当前是项目级，也清空层级
     selectedLevel.value = null
   }
   applyFilters()
 }
 
-// 查看详情
-function viewMemory(memory: Memory) {
-  router.push({ name: 'memory-edit', params: { id: memory.id } })
-}
-
-// 编辑记忆
-function editMemory(memory: Memory) {
-  router.push({ name: 'memory-edit', params: { id: memory.id } })
-}
-
-// 删除记忆
-function handleDelete(memory: Memory) {
-  dialog.warning({
-    title: '确认删除',
-    content: `确定要删除记忆"${memory.title}"吗？此操作不可恢复。`,
-    positiveText: '删除',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        await memoryStore.deleteMemory(memory.id)
-        message.success('删除成功')
-      } catch (error) {
-        message.error('删除失败')
-      }
-    },
-  })
-}
-
-// 加载更多
-function handleLoadMore() {
-  memoryStore.loadMore()
-}
-
 // 刷新列表
 async function handleRefresh() {
   try {
-    await memoryStore.fetchMemories()
+    await applyFilters()
     message.success('刷新成功')
   } catch (error) {
     message.error('刷新失败')
   }
-}
-
-// 新建记忆
-function handleNew() {
-  router.push({ name: 'memory-new' })
 }
 
 // 加载可用的筛选选项
@@ -273,71 +334,38 @@ const activeFilterCount = computed(() => {
 
 // 组件挂载时加载数据
 onMounted(async () => {
-  console.log('=== MemoryList onMounted ===')
-  console.log('appStore:', appStore)
-  console.log('appStore.$state:', appStore.$state)
-  console.log('typeof appStore.selectedLevel:', typeof appStore.selectedLevel)
-  console.log('appStore.selectedLevel value:', appStore.selectedLevel)
-
   await loadFilterOptions()
 
-  // Pinia store 的状态在 $state 中
+  // 检查是否有从 Categories 页面传来的筛选条件
   const level = appStore.$state.selectedLevel
   const library = appStore.$state.selectedLibrary
   const project = appStore.$state.selectedProject
 
-  console.log('level from $state:', level)
-  console.log('library from $state:', library)
-  console.log('project from $state:', project)
-
   const hasFiltersFromCategories = Boolean(level || library || project)
 
-  console.log('hasFiltersFromCategories:', hasFiltersFromCategories)
-
   if (hasFiltersFromCategories) {
-    // 从 Categories 跳转过来，应用筛选条件
     selectedLevel.value = level || null
     selectedLibrary.value = library || null
     selectedProject.value = project || null
-
-    console.log('Applied filters from appStore:')
-    console.log('  selectedLevel:', selectedLevel.value)
-    console.log('  selectedLibrary:', selectedLibrary.value)
-    console.log('  selectedProject:', selectedProject.value)
-
-    // 清空 appStore 的筛选条件（避免重复应用）
     appStore.resetFilters()
-
-    // 立即应用筛选
     await applyFilters()
   } else {
-    console.log('No filters from Categories, resetting all states')
-
-    // 直接访问，重置所有状态
     memoryStore.reset()
-    searchKeyword.value = ''
-    selectedLevel.value = null
-    selectedLibrary.value = null
-    selectedProject.value = null
-
-    // 加载记忆列表
-    try {
-      console.log('Calling fetchMemories() with no filters...')
-      await memoryStore.fetchMemories()
-    } catch (error) {
-      message.error('加载失败')
+    if (memoryStore.memories.length === 0) {
+      try {
+        await memoryStore.fetchMemories()
+      } catch (error) {
+        message.error('加载失败')
+      }
     }
   }
-
-  console.log('=== MemoryList onMounted end ===')
 })
 </script>
 
 <template>
-  <div class="memory-list">
-    <!-- 顶部工具栏 -->
+  <div class="memory-list-page">
+    <!-- 搜索工具栏 -->
     <div class="toolbar">
-      <!-- 搜索框 -->
       <div class="search-box">
         <NInput
           v-model:value="searchKeyword"
@@ -353,7 +381,6 @@ onMounted(async () => {
         </NInput>
       </div>
 
-      <!-- 操作按钮 -->
       <div class="actions">
         <NTooltip>
           <template #trigger>
@@ -454,74 +481,107 @@ onMounted(async () => {
       </div>
     </transition>
 
-    <!-- 列表内容 -->
-    <div v-if="memoryStore.loading && memoryStore.memories.length === 0" class="loading-container">
-      <NSpin size="large" />
-      <p>加载中...</p>
-    </div>
+    <!-- 主内容区：左侧列表，右侧表单 -->
+    <div class="content-area">
+      <!-- 左侧：记忆列表 -->
+      <div class="list-section">
+        <div v-if="memoryStore.loading && memoryStore.memories.length === 0" class="loading-container">
+          <NSpin size="large" />
+          <p>加载中...</p>
+        </div>
 
-    <NEmpty v-else-if="memoryStore.isEmpty" description="暂无记忆" size="large">
-      <template #extra>
-        <NButton type="primary" @click="handleNew">
-          创建第一条记忆
-        </NButton>
-      </template>
-    </NEmpty>
-
-    <div v-else class="list-container">
-      <NList hoverable clickable>
-        <NListItem v-for="memory in memoryStore.memories" :key="memory.id">
-          <template #prefix>
-            <div class="memory-icon">
-              <span>{{ levelConfig.find(l => l.key === memory.level)?.icon || '📄' }}</span>
-            </div>
+        <NEmpty v-else-if="memoryStore.isEmpty" description="暂无记忆" size="large">
+          <template #extra>
+            <NButton type="primary" @click="handleNew">
+              创建第一条记忆
+            </NButton>
           </template>
+        </NEmpty>
 
-          <div class="memory-item" @click="viewMemory(memory)">
-            <div class="memory-header">
-              <NText strong>{{ memory.title }}</NText>
-              <NTag :type="levelTypes[memory.level]" size="small" round>
-                {{ levelLabels[memory.level] }}
-              </NTag>
-            </div>
+        <div v-else class="list-container">
+          <NList hoverable clickable>
+            <NListItem
+              v-for="memory in memoryStore.memories"
+              :key="memory.id"
+              :class="['memory-item-wrapper', { selected: isSelected(memory) }]"
+              @click="selectMemory(memory)"
+            >
+              <template #prefix>
+                <div class="memory-icon" :class="{ selected: isSelected(memory) }">
+                  <span v-if="isSelected(memory)" class="check-icon">
+                    <NIcon :component="DoneOutlined" />
+                  </span>
+                  <span v-else>{{ levelConfig.find(l => l.key === memory.level)?.icon || '📄' }}</span>
+                </div>
+              </template>
 
-            <NText depth="3" class="memory-summary">
-              {{ memory.summary || memory.content.slice(0, 100) + '...' }}
-            </NText>
+              <div class="memory-item">
+                <div class="memory-header">
+                  <NText strong>{{ memory.title }}</NText>
+                  <NTag :type="levelTypes[memory.level]" size="small" round>
+                    {{ levelLabels[memory.level] }}
+                  </NTag>
+                </div>
 
-            <div class="memory-footer">
-              <NText depth="3" style="font-size: 12px">
-                {{ formatDate(memory.created_at) }}
-              </NText>
-              <NSpace size="small" @click.stop>
-                <NButton size="tiny" quaternary @click="editMemory(memory)">
-                  编辑
-                </NButton>
-                <NButton size="tiny" quaternary type="error" @click="handleDelete(memory)">
-                  删除
-                </NButton>
-              </NSpace>
-            </div>
+                <NText depth="3" class="memory-summary">
+                  {{ memory.summary || memory.content.slice(0, 100) + '...' }}
+                </NText>
+
+                <div class="memory-footer">
+                  <NText depth="3" style="font-size: 12px">
+                    {{ formatDate(memory.created_at) }}
+                  </NText>
+                  <NSpace size="small" @click.stop>
+                    <NButton size="tiny" quaternary type="error" @click="handleDelete(memory)">
+                      删除
+                    </NButton>
+                  </NSpace>
+                </div>
+              </div>
+            </NListItem>
+          </NList>
+
+          <div v-if="memoryStore.hasMore" class="load-more">
+            <NButton @click="memoryStore.loadMore()" :loading="memoryStore.loading" secondary>
+              加载更多
+            </NButton>
           </div>
-        </NListItem>
-      </NList>
 
-      <div v-if="memoryStore.hasMore" class="load-more">
-        <NButton @click="handleLoadMore" :loading="memoryStore.loading" secondary>
-          加载更多
-        </NButton>
+          <div v-if="memoryStore.memories.length > 0" class="list-footer">
+            共 {{ memoryStore.total }} 条记忆
+          </div>
+        </div>
       </div>
 
-      <div v-if="memoryStore.memories.length > 0" class="list-footer">
-        共 {{ memoryStore.total }} 条记忆
+      <!-- 右侧：编辑表单 -->
+      <div class="form-section">
+        <NCard title="编辑记忆" size="small" class="form-card">
+          <template #header-extra>
+            <NText v-if="editingMemory" depth="3" style="font-size: 12px">
+              {{ editingMemory.id ? `ID: ${editingMemory.id}` : '新建' }}
+            </NText>
+          </template>
+
+          <div class="form-content">
+            <MemoryForm
+              ref="formRef"
+              :memory="editingMemory || undefined"
+              :loading="memoryStore.loading"
+              @submit="handleSave"
+            />
+          </div>
+        </NCard>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.memory-list {
-  max-width: 800px;
+.memory-list-page {
+  min-height: 100%;
+  background: #f5f7fa;
+  padding: 24px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -619,7 +679,22 @@ onMounted(async () => {
   border-top: 1px solid #f0f0f0;
 }
 
-/* 加载状态 */
+/* 主内容区 */
+.content-area {
+  display: grid;
+  grid-template-columns: 1fr 1.8fr;
+  gap: 20px;
+  align-items: start;
+}
+
+/* 列表区域 */
+.list-section {
+  background: white;
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -629,23 +704,45 @@ onMounted(async () => {
   gap: 16px;
 }
 
-/* 列表容器 */
-.list-container {
-  background: white;
-  border-radius: 12px;
-  padding: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+.memory-item-wrapper {
+  transition: background-color 0.2s ease;
+  border-radius: 8px;
 }
 
-.memory-icon {
-  font-size: 28px;
-  margin-right: 12px;
+.memory-item-wrapper:hover {
+  background-color: #f8f9fa;
+}
+
+.memory-item-wrapper.selected {
+  background-color: #e6f7ff;
 }
 
 .memory-item {
   flex: 1;
   cursor: pointer;
   padding: 4px 0;
+}
+
+.memory-icon {
+  font-size: 28px;
+  margin-right: 12px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.memory-icon.selected {
+  background: #2080f0;
+  color: white;
+}
+
+.check-icon {
+  font-size: 18px;
 }
 
 .memory-header {
@@ -679,6 +776,20 @@ onMounted(async () => {
   font-size: 13px;
 }
 
+/* 表单区域 */
+.form-section {
+  position: sticky;
+  top: 0;
+}
+
+.form-card {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.form-content {
+  padding: 16px 0 0 0;
+}
+
 /* 过渡动画 */
 .slide-down-enter-active,
 .slide-down-leave-active {
@@ -700,5 +811,41 @@ onMounted(async () => {
   transform: translateY(0);
   max-height: 300px;
   margin-bottom: 16px;
+}
+
+/* 响应式布局 */
+@media (max-width: 1024px) {
+  .content-area {
+    grid-template-columns: 1fr 1.5fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .memory-list-page {
+    padding: 16px;
+  }
+
+  .content-area {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-section {
+    position: static;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    width: 100%;
+    order: 1;
+  }
+
+  .actions {
+    order: 2;
+  }
 }
 </style>
