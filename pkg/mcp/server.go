@@ -107,20 +107,24 @@ func (s *Server) registerTools() {
 		mcp.WithDescription("智能回忆仓颉语言实践经验（基于关键词全文搜索）。\n\n"+
 			"📌 搜索模式：使用**空格分隔的 AND 匹配**模式\n"+
 			"- 多个关键词必须**同时出现**才会匹配\n"+
-			"- 关键词越多，结果越精准\n"+
-			"- 建议：使用记忆中的核心关键词查询\n\n"+
+			"- 关键词越多越精准，但过多关键词（如同义词堆砌）可能导致返回空结果\n"+
+			"- **推荐使用 1-2 个核心关键词**进行查询\n\n"+
 			"✅ 查询示例：\n"+
-			"- 「interface 接口 定义」→ 匹配同时包含这 3 个词的记忆\n"+
-			"- 「var 变量 声明」→ 匹配同时包含这 3 个词的记忆\n"+
-			"- 「log 日志 配置」→ 匹配包含这些词的配置相关记忆\n\n"+
+			"- 「interface」→ 匹配包含接口的记忆\n"+
+			"- 「var 声明」→ 匹配包含变量和声明的记忆\n"+
+			"- 「log 配置」→ 匹配包含日志和配置的记忆\n\n"+
+			"❌ 不推荐示例：\n"+
+			"- 「interface 接口 定义 实现」→ 关键词过多，可能匹配不到\n"+
+			"- 「http 请求 get post」→ 同义词堆砌，容易返回空\n\n"+
 			"🎯 使用场景：\n"+
 			"1. 查询仓颉语法/关键字 → 不传 project_context，自动使用 language 级别\n"+
 			"2. 查询项目特定配置 → 传 project_context，自动使用 project 级别\n"+
-			"3. 通用设计模式/最佳实践 → 不传 project_context，使用 library 级别\n\n"+
+			"3. 查询特定库的知识 → 传 library_name，使用 library 级别\n"+
+			"4. 通用设计模式/最佳实践 → 不传 project_context，使用 library 级别\n\n"+
 			"💡 提示：通常只需传 query，让 AI 自动判断层级！"),
 		mcp.WithString("query",
 			mcp.Required(),
-			mcp.Description("查询内容（使用空格分隔的关键词，如：interface 接口 定义、var 变量 声明）"),
+			mcp.Description("查询内容（1-2个核心关键词，用空格分隔。如：interface、var 声明、http 请求。避免使用同义词堆砌）"),
 		),
 		mcp.WithString("level",
 			mcp.Description("记忆层级（通常不需要传，让 AI 自动判断。强制指定时可选：language/project/library）"),
@@ -128,6 +132,9 @@ func (s *Server) registerTools() {
 		),
 		mcp.WithString("language_tag",
 			mcp.Description("语言标签（默认 cangjie，通常不需要传）"),
+		),
+		mcp.WithString("library_name",
+			mcp.Description("库名筛选（可选。仅对 library 层级有效，如：tang、http-client）"),
 		),
 		mcp.WithString("project_context",
 			mcp.Description("项目路径（可选。不传时 AI 自动判断层级：通用问题→language，项目特定问题→project）"),

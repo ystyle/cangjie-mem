@@ -61,6 +61,7 @@ type RecallRequest struct {
 	Query          string  `json:"query" mcp:"required"`
 	Level          string  `json:"level,omitempty"` // 空字符串表示自动判断
 	LanguageTag    string  `json:"language_tag"`
+	LibraryName    string  `json:"library_name,omitempty"` // 库名筛选（仅对 library 层级有效）
 	ProjectContext string  `json:"project_context,omitempty"`
 	MaxResults     int     `json:"max_results"`
 	MinConfidence  float64 `json:"min_confidence"`
@@ -79,6 +80,8 @@ type RecallResult struct {
 	Confidence          float64        `json:"confidence"`
 	AccessCount         int            `json:"access_count"`
 	MatchedText         string         `json:"matched_text,omitempty"` // 匹配的文本片段
+	CreatedAt           string         `json:"created_at,omitempty"`   // 创建时间
+	UpdatedAt           string         `json:"updated_at,omitempty"`   // 更新时间
 }
 
 // RecallResponse 回忆响应

@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -111,9 +112,55 @@ func (d *Database) init() error {
 		return err
 	}
 
+	// 重建 FTS5 索引（将现有数据同步到 FTS5 表）
+	if err := d.rebuildFTSIndex(); err != nil {
+		// 记录错误但不中断初始化
+		log.Printf("Warning: failed to rebuild FTS index: %v", err)
+	}
+
 	// 自动迁移：检查并添加 library_name 字段（兼容老数据库）
 	// 迁移函数会负责创建 library_name 索引
 	return d.migrateLibraryName()
+}
+
+// rebuildFTSIndex 重建 FTS5 全文索引
+func (d *Database) rebuildFTSIndex() error {
+	// 检查是否有未索引的数据
+	var count int64
+	err := d.db.QueryRow("SELECT COUNT(*) FROM knowledge_base").Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	var ftsCount int64
+	err = d.db.QueryRow("SELECT COUNT(*) FROM knowledge_base_fts").Scan(&ftsCount)
+	if err != nil {
+		return err
+	}
+
+	// 如果数量不一致，需要重建索引
+	if count != ftsCount {
+		log.Printf("Rebuilding FTS index: %d records in main table, %d in FTS table", count, ftsCount)
+
+		// 先清空 FTS5 表
+		_, err = d.db.Exec("DELETE FROM knowledge_base_fts")
+		if err != nil {
+			return fmt.Errorf("failed to clear FTS table: %w", err)
+		}
+
+		// 重新插入所有数据到 FTS5 表
+		_, err = d.db.Exec(`
+			INSERT INTO knowledge_base_fts(rowid, title, content, summary)
+			SELECT id, title, content, summary FROM knowledge_base
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to rebuild FTS index: %w", err)
+		}
+
+		log.Printf("FTS index rebuilt successfully")
+	}
+
+	return nil
 }
 
 // Store 存储记忆
@@ -166,7 +213,7 @@ func (d *Database) Store(req types.StoreRequest) (*types.StoreResponse, error) {
 }
 
 // Recall 查询记忆（基础查询，不包含智能逻辑）
-func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag string, projectPath string, limit int) ([]types.RecallResult, error) {
+func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag string, projectPath string, libraryName string, limit int) ([]types.RecallResult, error) {
 	// 构建查询条件
 	whereClause := "WHERE language_tag = ?"
 	args := []interface{}{languageTag}
@@ -176,12 +223,20 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 		args = append(args, level)
 	}
 
+	// 库名筛选（仅对 library 层级有效）
+	if libraryName != "" {
+		whereClause += " AND library_name = ?"
+		args = append(args, libraryName)
+	}
+
 	// 项目上下文匹配
 	if projectPath != "" {
+		// 当传入项目路径时，只匹配有 project_path_pattern 的记录
+		// 不匹配 NULL 或空字符串的记录（那些是语言级记忆）
 		whereClause += ` AND (
-			project_path_pattern IS NULL
-			OR project_path_pattern = ''
-			OR project_path_pattern GLOB ?
+			project_path_pattern IS NOT NULL
+			AND project_path_pattern != ''
+			AND project_path_pattern GLOB ?
 		)`
 		args = append(args, projectPath)
 	}
@@ -200,7 +255,7 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 		SELECT
 			id, level, title, content, summary,
 			library_name, project_path_pattern, source,
-			access_count, confidence
+			access_count, confidence, created_at, updated_at
 		FROM knowledge_base
 	` + whereClause + queryClause + `
 		ORDER BY confidence DESC, access_count DESC
@@ -218,11 +273,12 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 	for rows.Next() {
 		var r types.RecallResult
 		var libraryName, pattern, summary sql.NullString
+		var createdAt, updatedAt time.Time
 
 		err := rows.Scan(
 			&r.ID, &r.Level, &r.Title, &r.Content, &summary,
 			&libraryName, &pattern, &r.Source,
-			&r.AccessCount, &r.Confidence,
+			&r.AccessCount, &r.Confidence, &createdAt, &updatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -237,6 +293,8 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 		if pattern.Valid {
 			r.ProjectPathPattern = pattern.String
 		}
+		r.CreatedAt = createdAt.Format(time.RFC3339)
+		r.UpdatedAt = updatedAt.Format(time.RFC3339)
 
 		results = append(results, r)
 	}
@@ -357,7 +415,7 @@ func (d *Database) List(req types.ListRequest) (*types.ListResponse, error) {
 	}
 
 	if req.ProjectPathPattern != "" {
-		whereClause += " AND project_path_pattern = ?"
+		whereClause += " AND project_path_pattern GLOB ?"
 		args = append(args, req.ProjectPathPattern)
 	}
 

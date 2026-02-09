@@ -60,7 +60,7 @@ func (s *Store) RecallMemories(req types.RecallRequest) (*types.RecallResponse, 
 	ftsQuery := s.buildFTSQuery(req.Query)
 
 	// 执行查询
-	results, err := s.db.Recall(ftsQuery, level, req.LanguageTag, req.ProjectContext, req.MaxResults*2)
+	results, err := s.db.Recall(ftsQuery, level, req.LanguageTag, req.ProjectContext, req.LibraryName, req.MaxResults*2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to recall memories: %w", err)
 	}

@@ -574,7 +574,7 @@ func TestRecall(t *testing.T) {
 	}
 
 	// 测试英文全文搜索
-	results, err := db.Recall("RouterGroup", types.LevelLibrary, "cangjie", "", 10)
+	results, err := db.Recall("RouterGroup", types.LevelLibrary, "cangjie", "", "", 10)
 	if err != nil {
 		t.Fatalf("Recall() error = %v", err)
 	}
