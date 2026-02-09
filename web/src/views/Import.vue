@@ -179,9 +179,9 @@ const importStats = computed(() => {
                 </NAlert>
 
                 <!-- 冲突列表 -->
-                <div v-if="importPreview.conflicts.length > 0">
+                <div v-if="importPreview.conflicts?.length > 0">
                   <NText strong style="margin-bottom: 8px; display: block">
-                    将被覆盖的记录 ({{ importPreview.conflicts.length }})
+                    将被覆盖的记录 ({{ importPreview.conflicts?.length }})
                   </NText>
                   <NList bordered size="small" style="max-height: 200px; overflow-y: auto">
                     <NListItem v-for="conflict in importPreview.conflicts" :key="conflict.existing_id">
