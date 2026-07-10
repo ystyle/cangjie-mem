@@ -136,6 +136,8 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download binaries
         uses: actions/download-artifact@v4
         with:
