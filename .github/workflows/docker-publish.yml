@@ -29,6 +29,7 @@ jobs:
       - name: Build frontend
         run: |
           npm install -g pnpm
+          pnpm config set onlyBuiltDependencies '["esbuild","vue-demi"]'
           pnpm install --no-frozen-lockfile --dir web
           pnpm --dir web build
 
