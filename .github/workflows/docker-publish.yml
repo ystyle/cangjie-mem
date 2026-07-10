@@ -29,9 +29,8 @@ jobs:
       - name: Build frontend
         run: |
           npm install -g pnpm
-          cd web
-          pnpm install --no-frozen-lockfile
-          pnpm build
+          pnpm install --no-frozen-lockfile --dir web
+          pnpm --dir web build
 
       - name: Cross-compile all binaries
         run: |
