@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: Build and Release
 
 on:
   push:
@@ -11,25 +11,87 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  # 1. 先交叉编译所有平台的二进制文件
+  cross-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Build frontend
+        run: |
+          npm install -g pnpm
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Cross-compile all binaries
+        run: |
+          set -e
+          mkdir -p release
+
+          export GOPROXY=https://goproxy.cn,direct
+          LDFLAGS="-s -w"
+
+          for target in "linux/amd64" "linux/arm64" "linux/loong64" "windows/amd64" "darwin/amd64" "darwin/arm64"; do
+            IFS='/' read -r os arch <<< "$target"
+            ext=""
+            [ "$os" = "windows" ] && ext=".exe"
+            name="cangjie-mem-$os-$arch$ext"
+
+            echo "=== $os/$arch ==="
+            GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o "release/$name" ./cmd/server
+          done
+
+          echo "=== All binaries ==="
+          ls -lh release/
+
+      - name: Upload binaries as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: release/*
+          retention-days: 1
+
+  # 2. Docker 镜像（直接拷贝编译好的二进制，无需 QEMU）
+  docker:
+    needs: cross-build
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      matrix:
+        platform:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: linux
+            arch: loong64
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: release/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -42,236 +104,40 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
 
       - name: Build and push Docker image
-        id: build-and-push
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          file: Dockerfile.cross
+          platforms: ${{ matrix.platform.os }}/${{ matrix.platform.arch }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            TARGETOS=${{ matrix.platform.os }}
+            TARGETARCH=${{ matrix.platform.arch }}
 
-      # 注释掉 Trivy 扫描，因为它在推送失败时会导致整个 workflow 失败
-      # - name: Run Trivy vulnerability scanner
-      #   uses: aquasecurity/trivy-action@master
-      #   with:
-      #     image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-      #     format: 'sarif'
-      #     output: 'trivy-results.sarif'
-      #
-      # - name: Upload Trivy results to GitHub Security
-      #   uses: github/codeql-action/upload-sarif@v3
-      #   if: always()
-      #   with:
-      #     sarif_file: 'trivy-results.sarif'
-
-  # 从 Docker 镜像提取二进制文件并上传到 Release
-  extract-binaries-and-release:
-    needs: [build, build-macos]
+  # 3. 发布 Release
+  release:
+    needs: [cross-build, docker]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          VERSION=${VERSION#v}  # 去掉开头的 v（如果有）
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Extract binaries from Docker images
-        run: |
-          set -e
-
-          # 创建输出目录
-          mkdir -p release
-
-          # 定义平台列表
-          declare -A platforms
-          platforms["amd64"]="linux/amd64"
-          platforms["arm64"]="linux/arm64"
-
-          # 为每个平台提取二进制文件
-          for arch in "${!platforms[@]}"; do
-            platform="${platforms[$arch]}"
-            image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION"
-
-            echo "Extracting binary for $platform ($arch)..."
-
-            # 创建容器并复制二进制文件
-            container_id=$(docker create --platform "$platform" "$image")
-            docker cp "$container_id:/app/cangjie-mem" "release/cangjie-mem-linux-$arch"
-            docker rm "$container_id"
-
-            # 打包
-            cd release
-            tar czf "cangjie-mem-linux-$arch.tar.gz" "cangjie-mem-linux-$arch"
-            cd ..
-
-            echo "✓ Extracted cangjie-mem-linux-$arch"
-          done
-
-          # 列出所有文件
-          ls -lh release/
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm and build frontend
-        run: |
-          # 安装 pnpm
-          npm install -g pnpm
-
-          # 构建前端
-          cd web
-          pnpm install --frozen-lockfile
-          pnpm build
-
-      - name: Cross-compile Windows binaries
-        run: |
-          set -e
-
-          # 安装 MinGW（Windows 交叉编译工具链）
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64
-
-          # 设置 Go 代理
-          export GOPROXY=https://goproxy.cn,direct
-
-          # Windows AMD64（主流平台）
-          echo "Cross-compiling for windows/amd64..."
-          CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 \
-            go build -tags sqlite_fts5 -ldflags="-s -w" \
-            -o release/cangjie-mem-windows-amd64.exe ./cmd/server
-
-          # 打包
-          cd release
-          tar czf cangjie-mem-windows-amd64.tar.gz cangjie-mem-windows-amd64.exe
-          cd ..
-
-          echo "✓ Cross-compiled Windows binary"
-          ls -lh release/
-
-      - name: Download macOS binaries
+      - name: Download binaries
         uses: actions/download-artifact@v4
         with:
-          name: macos-binaries
+          name: binaries
           path: release/
-
-      - name: Create Release and upload binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ env.VERSION }}"
-
-          # 创建 Release
-          gh release create "$VERSION" \
-            --title "cangjie-mem $VERSION" \
-            --notes "## cangjie-mem $VERSION
-
-          ### 🎉 功能特性
-          - **Streamable HTTP 模式**：支持远程访问 MCP 服务器
-          - **Token 认证**：简单有效的访问控制
-          - **多平台支持**：Linux / Windows / macOS (Intel + Apple Silicon)
-          - **Docker 部署**：支持多平台（amd64/arm64）
-          - **三级记忆模型**：language/project/library
-          - **智能检索**：自动层级判断和置信度评分
-          - **SQLite FTS5**：高性能全文搜索
-
-          ### 📦 下载说明
-
-          **Docker 镜像**（推荐）：
-          \`\`\`bash
-          # 拉取镜像
-          docker pull ghcr.io/ystyle/cangjie-mem:$VERSION
-
-          # 运行（无认证）
-          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION
-
-          # 运行（带 Token）
-          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION \\
-            -http -addr :8080 -token \"your-secret-token\"
-          \`\`\`
-
-          **二进制文件**：
-
-          **Linux**：
-          - \`cangjie-mem-linux-amd64.tar.gz\` - Linux x86_64
-          - \`cangjie-mem-linux-arm64.tar.gz\` - Linux ARM64
-
-          **Windows**：
-          - \`cangjie-mem-windows-amd64.tar.gz\` - Windows x86_64
-
-          **macOS**：
-          - \`cangjie-mem-darwin-amd64.tar.gz\` - macOS Intel
-          - \`cangjie-mem-darwin-arm64.tar.gz\` - macOS Apple Silicon
-
-          **使用方法**：
-          \`\`\`bash
-          # 解压
-          tar xzf cangjie-mem-*.tar.gz
-
-          # 运行（Linux/macOS）
-          ./cangjie-mem-*
-
-          # 运行（Windows）
-          .\\cangjie-mem-*.exe
-          \`\`\`
-
-          详细使用说明请查看 [README](https://github.com/ystyle/cangjie-mem)
-          " || true
-
-          # 上传二进制文件
-          for binary in release/*.tar.gz; do
-            echo "Uploading $binary..."
-            gh release upload "$VERSION" "$binary"
-          done
-
-  # macOS 构建步骤
-  build-macos:
-    needs: build
-    runs-on: macos-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
-          cache: true
 
       - name: Get version
         id: version
@@ -281,53 +147,78 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm and build frontend
+      - name: Package binaries
         run: |
-          # 安装 pnpm
-          npm install -g pnpm
-
-          # 构建前端
-          cd web
-          pnpm install --frozen-lockfile
-          pnpm build
-
-      - name: Build macOS binaries
-        run: |
-          mkdir -p release
-
-          # 设置 Go 代理
-          export GOPROXY=https://goproxy.cn,direct
-
-          # macOS AMD64 (Intel)
-          echo "Building for darwin/amd64..."
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 \
-            go build -tags sqlite_fts5 -ldflags="-s -w" \
-            -o release/cangjie-mem-darwin-amd64 ./cmd/server
-
-          # macOS ARM64 (Apple Silicon)
-          echo "Building for darwin/arm64..."
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 \
-            go build -tags sqlite_fts5 -ldflags="-s -w" \
-            -o release/cangjie-mem-darwin-arm64 ./cmd/server
-
-          # 打包
+          set -e
           cd release
+
+          # Linux
+          tar czf cangjie-mem-linux-amd64.tar.gz cangjie-mem-linux-amd64
+          tar czf cangjie-mem-linux-arm64.tar.gz cangjie-mem-linux-arm64
+          tar czf cangjie-mem-linux-loong64.tar.gz cangjie-mem-linux-loong64
+
+          # Windows
+          tar czf cangjie-mem-windows-amd64.tar.gz cangjie-mem-windows-amd64.exe
+
+          # macOS
           tar czf cangjie-mem-darwin-amd64.tar.gz cangjie-mem-darwin-amd64
           tar czf cangjie-mem-darwin-arm64.tar.gz cangjie-mem-darwin-arm64
-          cd ..
 
-          echo "✓ Built macOS binaries"
-          ls -lh release/
+          # 清理未打包的文件
+          rm -f cangjie-mem-linux-amd64 cangjie-mem-linux-arm64 cangjie-mem-linux-loong64
+          rm -f cangjie-mem-windows-amd64.exe
+          rm -f cangjie-mem-darwin-amd64 cangjie-mem-darwin-arm64
 
-      - name: Upload macOS binaries as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-binaries
-          path: release/*.tar.gz
-          retention-days: 1
+          ls -lh
 
+      - name: Create Release and upload binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ env.VERSION }}"
+
+          gh release create "$VERSION" \
+            --title "cangjie-mem $VERSION" \
+            --notes "## cangjie-mem $VERSION
+
+          ### 功能特性
+          - **Streamable HTTP 模式**：支持远程访问 MCP 服务器
+          - **Token 认证**：简单有效的访问控制
+          - **多平台支持**：Linux (amd64/arm64/loong64) / Windows / macOS
+          - **Docker 部署**：支持多平台（amd64/arm64/loong64）
+          - **三级记忆模型**：language/project/library
+          - **智能检索**：自动层级判断和置信度评分
+          - **纯 Go SQLite**：无需 CGO，基于 modernc.org/sqlite
+
+          ### Docker 镜像
+
+          \`\`\`bash
+          docker pull ghcr.io/ystyle/cangjie-mem:$VERSION
+
+          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION
+
+          docker run -d --name cangjie-mem -p 8080:8080 ghcr.io/ystyle/cangjie-mem:$VERSION \\
+            -http -addr :8080 -token \"your-secret-token\"
+          \`\`\`
+
+          ### 二进制文件
+
+          **Linux**：
+          - \`cangjie-mem-linux-amd64.tar.gz\` - x86_64
+          - \`cangjie-mem-linux-arm64.tar.gz\` - ARM64
+          - \`cangjie-mem-linux-loong64.tar.gz\` - LoongArch64（龙芯）
+
+          **Windows**：
+          - \`cangjie-mem-windows-amd64.tar.gz\` - x86_64
+
+          **macOS**：
+          - \`cangjie-mem-darwin-amd64.tar.gz\` - Intel
+          - \`cangjie-mem-darwin-arm64.tar.gz\` - Apple Silicon
+
+          详细使用说明请查看 [README](https://github.com/ystyle/cangjie-mem)
+          " || true
+
+          for binary in release/*.tar.gz; do
+            echo "Uploading $binary..."
+            gh release upload "$VERSION" "$binary"
+          done

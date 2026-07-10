@@ -1,0 +1,27 @@
+ARG TARGETOS
+ARG TARGETARCH
+
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates
+
+RUN addgroup -g 1000 cangjie && \
+    adduser -D -u 1000 -G cangjie cangjie
+
+WORKDIR /app
+
+COPY release/cangjie-mem-${TARGETOS}-${TARGETARCH} .
+
+RUN mkdir -p /home/cangjie/.cangjie-mem && \
+    chown -R cangjie:cangjie /home/cangjie
+
+USER cangjie
+
+ENV DB_PATH=/home/cangjie/.cangjie-mem/memory.db
+
+EXPOSE 8080
+
+CMD ["./cangjie-mem-${TARGETOS}-${TARGETARCH}", "-http", "-addr", ":8080", "-api", "-ui"]
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1

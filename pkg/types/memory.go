@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // KnowledgeLevel 记忆层级
 type KnowledgeLevel string
@@ -175,6 +178,9 @@ type DeleteResponse struct {
 	Message string `json:"message"`
 }
 
+// 知识包格式版本
+const PackageFormatVersion = "1.0"
+
 // PackageInfo 知识包信息
 type PackageInfo struct {
 	Name        string   `json:"name"`
@@ -186,17 +192,31 @@ type PackageInfo struct {
 
 // KnowledgePackage 知识包（导入/导出格式）
 type KnowledgePackage struct {
-	Version  string            `json:"version"`  // 格式版本
+	Version  string            `json:"version"`  // 包格式版本（如 "1.0"）
 	Package  PackageInfo       `json:"package"`  // 包信息
 	Memories []StoreRequest    `json:"memories"` // 记忆列表
 }
 
+// CheckPackageVersion 校验包格式版本兼容性
+func CheckPackageVersion(version string) error {
+	if version == "" {
+		return fmt.Errorf("package version is required")
+	}
+	if version != PackageFormatVersion {
+		return fmt.Errorf("unsupported package format version: %s (expected %s)", version, PackageFormatVersion)
+	}
+	return nil
+}
+
 // ExportRequest 导出请求
 type ExportRequest struct {
-	Level              string `json:"level,omitempty"`
-	LibraryName        string `json:"library_name,omitempty"`
-	ProjectPathPattern string `json:"project_path_pattern,omitempty"`
-	LanguageTag        string `json:"language_tag,omitempty"`
+	Level              string   `json:"level,omitempty"`
+	LibraryName        string   `json:"library_name,omitempty"`
+	ProjectPathPattern string   `json:"project_path_pattern,omitempty"`
+	LanguageTag        string   `json:"language_tag,omitempty"`
+	Description        string   `json:"description,omitempty"`  // 包描述
+	Author             string   `json:"author,omitempty"`        // 包作者
+	Tags               []string `json:"tags,omitempty"`          // 包标签
 }
 
 // ImportPreview 导入预览

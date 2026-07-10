@@ -117,27 +117,27 @@ func (s *Server) registerTools() {
 			"- 「interface 接口 定义 实现」→ 关键词过多，可能匹配不到\n"+
 			"- 「http 请求 get post」→ 同义词堆砌，容易返回空\n\n"+
 			"🎯 使用场景：\n"+
-			"1. 查询仓颉语法/关键字 → 不传 project_context，自动使用 language 级别\n"+
-			"2. 查询项目特定配置 → 传 project_context，自动使用 project 级别\n"+
-			"3. 查询特定库的知识 → 传 library_name，使用 library 级别\n"+
-			"4. 通用设计模式/最佳实践 → 不传 project_context，使用 library 级别\n\n"+
-			"💡 提示：通常只需传 query，让 AI 自动判断层级！"),
+			"1. 查询仓颉语法/关键字 → 不传 level，搜索全部层级\n"+
+			"2. 查询项目特定配置 → 传 project_context 或 level=project\n"+
+			"3. 查询特定库的知识 → 传 library_name\n"+
+			"4. 通用设计模式/最佳实践 → 不传 level，自动搜索全部层级\n\n"+
+			"💡 提示：通常只需传 query，搜索结果会按 language→library→project 优先级排序！"),
 		mcp.WithString("query",
 			mcp.Required(),
 			mcp.Description("查询内容（1-2个核心关键词，用空格分隔。如：interface、var 声明、http 请求。避免使用同义词堆砌）"),
 		),
 		mcp.WithString("level",
-			mcp.Description("记忆层级（通常不需要传，让 AI 自动判断。强制指定时可选：language/project/library）"),
+			mcp.Description("记忆层级（可选。不传时搜索全部三级：language/project/library。传了则只搜该层级）"),
 			mcp.Enum("language", "project", "library"),
 		),
 		mcp.WithString("language_tag",
 			mcp.Description("语言标签（默认 cangjie，通常不需要传）"),
 		),
 		mcp.WithString("library_name",
-			mcp.Description("库名筛选（可选。仅对 library 层级有效，如：tang、http-client）"),
+			mcp.Description("库名筛选（可选。如：tang、http-client）"),
 		),
 		mcp.WithString("project_context",
-			mcp.Description("项目路径（可选。不传时 AI 自动判断层级：通用问题→language，项目特定问题→project）"),
+			mcp.Description("项目路径（可选。传了会优先匹配该项目相关的记忆）"),
 		),
 		mcp.WithNumber("max_results",
 			mcp.Description("最大返回数量（默认 10）"),

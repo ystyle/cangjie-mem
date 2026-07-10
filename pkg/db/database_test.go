@@ -1,6 +1,3 @@
-//go:build sqlite_fts5
-// +build sqlite_fts5
-
 package db
 
 import (
@@ -10,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"github.com/ystyle/cangjie-mem/pkg/types"
 )
 
@@ -680,7 +677,7 @@ func TestMigration(t *testing.T) {
 		os.Remove(oldDBPath)
 
 		// 创建旧版本数据库结构（v1.2.0）
-		oldDB, err := sql.Open("sqlite3", oldDBPath+"?_fk=1")
+		oldDB, err := sql.Open("sqlite", oldDBPath+"?_pragma=foreign_keys(1)")
 		if err != nil {
 			t.Fatalf("failed to create old database: %v", err)
 		}

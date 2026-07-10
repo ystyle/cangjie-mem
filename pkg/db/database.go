@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite/vec"
 	"github.com/ystyle/cangjie-mem/pkg/types"
 )
 
@@ -36,13 +37,13 @@ func New(cfg Config) (*Database, error) {
 	}
 
 	// 打开数据库连接
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	// 设置连接池参数
-	db.SetMaxOpenConns(1) // SQLite 只允许单写
+	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
 	// 初始化数据库结构
@@ -213,8 +214,9 @@ func (d *Database) Store(req types.StoreRequest) (*types.StoreResponse, error) {
 }
 
 // Recall 查询记忆（基础查询，不包含智能逻辑）
+// level 为空时搜索所有层级；libraryName 为空时不按库名过滤；
+// projectPath 为空时不按项目路径过滤
 func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag string, projectPath string, libraryName string, limit int) ([]types.RecallResult, error) {
-	// 构建查询条件
 	whereClause := "WHERE language_tag = ?"
 	args := []interface{}{languageTag}
 
@@ -223,16 +225,12 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 		args = append(args, level)
 	}
 
-	// 库名筛选（仅对 library 层级有效）
 	if libraryName != "" {
 		whereClause += " AND library_name = ?"
 		args = append(args, libraryName)
 	}
 
-	// 项目上下文匹配
 	if projectPath != "" {
-		// 当传入项目路径时，只匹配有 project_path_pattern 的记录
-		// 不匹配 NULL 或空字符串的记录（那些是语言级记忆）
 		whereClause += ` AND (
 			project_path_pattern IS NOT NULL
 			AND project_path_pattern != ''
@@ -241,7 +239,6 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 		args = append(args, projectPath)
 	}
 
-	// 全文搜索
 	queryClause := `
 		AND id IN (
 			SELECT rowid FROM knowledge_base_fts
@@ -258,7 +255,14 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 			access_count, confidence, created_at, updated_at
 		FROM knowledge_base
 	` + whereClause + queryClause + `
-		ORDER BY confidence DESC, access_count DESC
+		ORDER BY
+			CASE level
+				WHEN 'language' THEN 0
+				WHEN 'library' THEN 1
+				WHEN 'project' THEN 2
+			END,
+			confidence DESC,
+			access_count DESC
 		LIMIT ?
 	`
 	args = append(args, limit)
@@ -272,12 +276,12 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 	var results []types.RecallResult
 	for rows.Next() {
 		var r types.RecallResult
-		var libraryName, pattern, summary sql.NullString
+		var libName, pattern, summary sql.NullString
 		var createdAt, updatedAt time.Time
 
 		err := rows.Scan(
 			&r.ID, &r.Level, &r.Title, &r.Content, &summary,
-			&libraryName, &pattern, &r.Source,
+			&libName, &pattern, &r.Source,
 			&r.AccessCount, &r.Confidence, &createdAt, &updatedAt,
 		)
 		if err != nil {
@@ -287,8 +291,8 @@ func (d *Database) Recall(query string, level types.KnowledgeLevel, languageTag 
 		if summary.Valid {
 			r.Summary = summary.String
 		}
-		if libraryName.Valid {
-			r.LibraryName = libraryName.String
+		if libName.Valid {
+			r.LibraryName = libName.String
 		}
 		if pattern.Valid {
 			r.ProjectPathPattern = pattern.String

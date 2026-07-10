@@ -28,7 +28,6 @@ func (s *Store) StoreMemory(req types.StoreRequest) (*types.StoreResponse, error
 
 // RecallMemories 智能检索记忆
 func (s *Store) RecallMemories(req types.RecallRequest) (*types.RecallResponse, error) {
-	// 设置默认值
 	if req.LanguageTag == "" {
 		req.LanguageTag = "cangjie"
 	}
@@ -39,49 +38,38 @@ func (s *Store) RecallMemories(req types.RecallRequest) (*types.RecallResponse, 
 		req.MinConfidence = 0.5
 	}
 
-	// 自动判断层级
+	ftsQuery := s.buildFTSQuery(req.Query)
+
+	// 确定搜索的层级和策略
 	var level types.KnowledgeLevel
 	var strategy string
 
 	if req.Level != "" {
-		// 用户显式指定层级
 		level = types.KnowledgeLevel(req.Level)
 		if !level.IsValid() {
 			return nil, fmt.Errorf("invalid level: %s", req.Level)
 		}
 		strategy = fmt.Sprintf("user_specified_%s", level)
 	} else {
-		// 自动判断层级
-		level = s.determineLevel(req.Query, req.ProjectContext)
-		strategy = fmt.Sprintf("auto_determined_%s", level)
+		strategy = "auto_determined_all"
 	}
 
-	// 构建查询字符串（空格分隔的 AND 模式）
-	ftsQuery := s.buildFTSQuery(req.Query)
-
-	// 执行查询
-	results, err := s.db.Recall(ftsQuery, level, req.LanguageTag, req.ProjectContext, req.LibraryName, req.MaxResults*2)
+	results, err := s.db.Recall(ftsQuery, level, req.LanguageTag, req.ProjectContext, req.LibraryName, req.MaxResults*3)
 	if err != nil {
 		return nil, fmt.Errorf("failed to recall memories: %w", err)
 	}
 
-	// 计算置信度并排序
 	for i := range results {
 		results[i].Confidence = s.calculateConfidence(results[i], req.Query, req.ProjectContext)
-
-		// 提取匹配的文本片段
 		results[i].MatchedText = s.extractMatchedText(results[i].Content, req.Query, 100)
 	}
 
-	// 过滤低置信度结果并排序
 	filtered := s.filterAndSortResults(results, req.MinConfidence)
 
-	// 限制返回数量
 	if len(filtered) > req.MaxResults {
 		filtered = filtered[:req.MaxResults]
 	}
 
-	// 更新访问计数
 	for _, r := range filtered {
 		_ = s.db.UpdateAccessCount(r.ID)
 	}

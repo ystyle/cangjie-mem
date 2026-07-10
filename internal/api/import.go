@@ -88,12 +88,21 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 构建知识包
+	pkgName := "cangjie-mem"
+	if req.LibraryName != "" {
+		pkgName = req.LibraryName
+	} else if req.Level != "" {
+		pkgName = fmt.Sprintf("cangjie-mem-%s", req.Level)
+	}
+
 	pkg := types.KnowledgePackage{
-		Version: "1.0",
+		Version: types.PackageFormatVersion,
 		Package: types.PackageInfo{
-			Name:    "cangjie-mem export",
-			Version: time.Now().Format("2006.01.02.150405"),
+			Name:        pkgName,
+			Description: req.Description,
+			Author:      req.Author,
+			Tags:        req.Tags,
+			Version:     time.Now().Format("2006.01.02.150405"),
 		},
 		Memories: memories,
 	}
@@ -120,9 +129,9 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证格式
-	if pkg.Version == "" {
-		s.sendError(w, http.StatusBadRequest, "Invalid package format: missing version")
+	// 校验包格式版本
+	if err := types.CheckPackageVersion(pkg.Version); err != nil {
+		s.sendError(w, http.StatusBadRequest, fmt.Sprintf("Invalid package format: %v", err))
 		return
 	}
 
