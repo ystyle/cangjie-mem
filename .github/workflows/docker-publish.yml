@@ -28,10 +28,10 @@ jobs:
 
       - name: Build frontend
         run: |
-          npm install -g pnpm
-          pnpm install --no-frozen-lockfile --dir web \
-            --config.onlyBuiltDependencies='["esbuild","vue-demi"]'
-          pnpm --dir web build
+          npm install -g pnpm@9
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm build
 
       - name: Cross-compile all binaries
         run: |
