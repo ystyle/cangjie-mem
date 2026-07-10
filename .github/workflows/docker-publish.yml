@@ -88,6 +88,11 @@ jobs:
           name: binaries
           path: release/
 
+      - name: Prepare binary for Docker build
+        run: |
+          mkdir -p release/bin
+          cp release/cangjie-mem-${{ matrix.platform.os }}-${{ matrix.platform.arch }}* release/bin/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
