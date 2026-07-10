@@ -76,8 +76,6 @@ jobs:
             arch: amd64
           - os: linux
             arch: arm64
-          - os: linux
-            arch: loong64
 
     steps:
       - uses: actions/checkout@v4
