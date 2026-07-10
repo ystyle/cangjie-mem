@@ -1,12 +1,12 @@
 ARG TARGETOS
 ARG TARGETARCH
 
-FROM alpine:latest
+FROM debian:stable-slim
 
-RUN apk add --no-cache ca-certificates
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup -g 1000 cangjie && \
-    adduser -D -u 1000 -G cangjie cangjie
+RUN groupadd -g 1000 cangjie && \
+    useradd -m -u 1000 -g cangjie cangjie
 
 WORKDIR /app
 
