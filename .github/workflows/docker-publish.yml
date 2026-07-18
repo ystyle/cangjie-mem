@@ -182,6 +182,10 @@ jobs:
         run: |
           VERSION="${{ env.VERSION }}"
 
+          # 先删除已有的 release（如果有），再重新创建
+          gh release delete "$VERSION" --yes 2>/dev/null || true
+          git push --delete origin "${{ github.ref_name }}" 2>/dev/null || true
+          sleep 2
           gh release create "$VERSION" \
             --title "cangjie-mem $VERSION" \
             --notes "## cangjie-mem $VERSION
