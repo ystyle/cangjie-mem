@@ -11,6 +11,7 @@ RUN addgroup -g 1000 cangjie && \
 WORKDIR /app
 
 COPY release/bin/ ./
+RUN chmod +x cangjie-mem
 
 RUN mkdir -p /home/cangjie/.cangjie-mem && \
     chown -R cangjie:cangjie /home/cangjie
